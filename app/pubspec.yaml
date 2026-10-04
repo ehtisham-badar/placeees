@@ -42,6 +42,15 @@ dev_dependencies:
     sdk: flutter
   flutter_driver:
     sdk: flutter
+  flutter_launcher_icons: ^0.14.4
 
 flutter:
   uses-material-design: true
+
+flutter_launcher_icons:
+  image_path: assets/icon/icon.png
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  adaptive_icon_background: "#0A0C11"
+  adaptive_icon_foreground: assets/icon/icon_foreground.png

@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: trace-api
+    services:
+      postgis:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: trace
+          POSTGRES_PASSWORD: trace
+          POSTGRES_DB: trace_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U trace" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: trace-api/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: Integration tests (PostGIS)
+        run: npm run test:db
+        env:
+          TEST_DATABASE_URL: postgres://trace:trace@localhost:5432/trace_test
+      - run: npm run build
+
+  app:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.5
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test

@@ -1,0 +1,118 @@
+{
+  "campus": "Example campus (replace me)",
+  "founders": [
+    "noor",
+    "bilal",
+    "zara",
+    "hamza.shoots",
+    "mehak"
+  ],
+  "landmarks": [
+    {
+      "name": "Main gate",
+      "at": {
+        "lat": 31.4697,
+        "lng": 74.2728
+      },
+      "notes": [
+        {
+          "teaser": "Read this if today was heavy.",
+          "body": "Whoever you are, you made it here. Sit for a minute. You're doing better than you think.",
+          "by": "noor"
+        },
+        {
+          "teaser": "The guard knows everyone's name.",
+          "body": "Say salaam to Rashid uncle. He has worked this gate for 22 years.",
+          "by": "bilal"
+        },
+        {
+          "teaser": "First day? Start here.",
+          "body": "Library left, cafeteria right, and the best samosas are behind the admin block."
+        }
+      ]
+    },
+    {
+      "name": "Library",
+      "at": {
+        "lat": 31.472593,
+        "lng": 74.275647
+      },
+      "notes": [
+        {
+          "teaser": "Exam week survival kit.",
+          "body": "Corner table by the window has a plug that works. Sleep. Seriously.",
+          "by": "zara"
+        },
+        {
+          "teaser": "Third floor, last aisle.",
+          "body": "Someone left a poem in the old poetry section in 2019. It's still there."
+        }
+      ]
+    },
+    {
+      "name": "Cafeteria",
+      "at": {
+        "lat": 31.468623,
+        "lng": 74.276268
+      },
+      "notes": [
+        {
+          "teaser": "The chai guy knows my order.",
+          "body": "Doodh patti, less sugar, extra elaichi. Tell him Bilal sent you.",
+          "by": "bilal"
+        },
+        {
+          "teaser": "Best seat for the 6pm light.",
+          "body": "The bench facing west. Thank me later.",
+          "by": "hamza.shoots"
+        }
+      ]
+    }
+  ],
+  "trails": [
+    {
+      "title": "Orientation Hunt",
+      "by": "noor",
+      "stops": [
+        {
+          "at": {
+            "lat": 31.46988,
+            "lng": 74.2728
+          },
+          "teaser": "The hunt starts here.",
+          "body": "Welcome! Three stops, one campus. Read the clue, then follow it.",
+          "clue": "Start at the gate where everyone says salaam."
+        },
+        {
+          "at": {
+            "lat": 31.472456,
+            "lng": 74.275511
+          },
+          "teaser": "Stop two.",
+          "body": "Every book in here was read by someone before you.",
+          "clue": "Where it's quietest, and the plugs are rare."
+        },
+        {
+          "at": {
+            "lat": 31.468654,
+            "lng": 74.276169
+          },
+          "teaser": "The last stop.",
+          "body": "You made it. The chai is on us; show this to the stall.",
+          "clue": "Follow the smell of elaichi."
+        }
+      ]
+    }
+  ],
+  "relays": [
+    {
+      "at": {
+        "lat": 31.468432,
+        "lng": 74.272259
+      },
+      "teaser": "Pass it on: the travelling notebook.",
+      "body": "Carry this a kilometre and leave it somewhere you love.",
+      "by": "zara"
+    }
+  ]
+}

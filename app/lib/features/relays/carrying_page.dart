@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/analytics.dart';
 import '../../core/api/api_error.dart';
 import '../../core/api/demo_api.dart';
 import '../../core/api/geo.dart';
@@ -132,6 +133,7 @@ class _RelayCardState extends State<_RelayCard> {
       final fix = await location.freshFix(maxAge: const Duration(seconds: 5));
       if (fix == null) throw const ApiError('low_accuracy');
       final travelled = await api.dropRelay(widget.relay.id, fix, note: _note.text);
+      if (mounted) context.read<Analytics>().track('relay_dropped', {'meters': travelled.round()});
       HapticFeedback.heavyImpact();
       messenger.showSnackBar(SnackBar(content: Text('Left it here, ${distanceLabel(travelled)} from where you found it.')));
       widget.onDropped();

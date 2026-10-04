@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/analytics.dart';
 import '../../core/api/api_error.dart';
 import '../../core/api/models.dart';
 import '../../core/api/signature.dart';
@@ -118,6 +119,15 @@ class _ComposerPageState extends State<ComposerPage> {
         recipientHandles: _relay ? const [] : _rules.recipients,
         circleId: _relay || _rules.recipients.isNotEmpty ? null : _circleId,
       );
+      if (mounted) {
+        context.read<Analytics>().track('drop_created', {
+          'type': _type.wire,
+          'relay': _relay,
+          'capsule': _rules.capsuleAt != null,
+          'conditional': _rules.conditions(_tz).isNotEmpty,
+          'circle': _circleId != null,
+        });
+      }
       HapticFeedback.heavyImpact();
       setState(() => _done = true);
       await Future.delayed(const Duration(milliseconds: 2200));

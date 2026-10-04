@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/api/api_error.dart';
+import '../../core/analytics.dart';
 import '../../core/api/conditions.dart';
 import '../../core/api/models.dart';
 import '../../core/api/trace_api.dart';
@@ -79,6 +80,7 @@ class _UnlockPageState extends State<UnlockPage> with TickerProviderStateMixin {
     if (elapsed < minimum) await Future.delayed(minimum - elapsed);
     if (!mounted) return;
 
+    _report(content, error);
     if (content != null) {
       setState(() => _phase = _Phase.opened);
       widget.onUnlocked?.call(widget.drop.id);
@@ -105,6 +107,17 @@ class _UnlockPageState extends State<UnlockPage> with TickerProviderStateMixin {
       HapticFeedback.mediumImpact();
       _shake.forward(from: 0);
     }
+  }
+
+  void _report(DropContent? content, ApiError? error) {
+    final a = context.read<Analytics>();
+    a.track('unlock_attempt', {'reason': error?.code ?? 'ok'});
+    if (content == null) return;
+    a.track('unlock_success', {'type': content.type.wire});
+    if (widget.drop.capsuleUnlockAt != null) a.track('capsule_opened');
+    final trail = content.trail;
+    if (trail != null && trail.seq == 1) a.track('trail_started', {'trailId': trail.id});
+    if (trail != null && trail.completedAt != null && trail.isLast) a.track('trail_completed', {'trailId': trail.id});
   }
 
   String _failureText() {

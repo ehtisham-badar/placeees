@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:latlong2/latlong.dart' show LatLng;
 
+import '../analytics.dart' show AppEvent;
 import 'api_error.dart';
 import 'conditions.dart';
 import 'geo.dart';
@@ -491,6 +492,9 @@ class DemoApi implements TraceApi {
       ],
     );
   }
+
+  @override
+  Future<void> track(List<AppEvent> events) async {} // demo mode records nothing
 
   /// Demo venue: the chai stall drop, as if a QR poster hung there.
   static const demoVenueCode = 'CHA23456';

@@ -11,6 +11,7 @@ import '../../core/api/demo_api.dart';
 import '../../core/api/geo.dart';
 import '../../core/api/models.dart';
 import '../../core/api/trace_api.dart';
+import '../../core/analytics.dart';
 import '../../core/config.dart';
 import '../../core/format.dart';
 import '../../core/location/location_service.dart';
@@ -66,6 +67,7 @@ class _CompassPageState extends State<CompassPage> with SingleTickerProviderStat
     _location.addListener(_onFix);
     _onFix();
     _engine.start();
+    context.read<Analytics>().track('compass_start', {'dropId': widget.drop.id});
   }
 
   @override

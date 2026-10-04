@@ -69,7 +69,33 @@ const ban = (userId, handle) => act('Ban @' + (handle || 'user'), 'bad', () => {
   return api('/users/' + userId + '/ban', { banned: true });
 });
 
+const LABELS = {
+  firstSessionUnlockRate: ['First-session unlock rate', 'pct'], d1Retention: ['D1 retention', 'pct'],
+  d7Retention: ['D7 retention', 'pct'], dropsPerWau: ['Drops per weekly user', 'num'],
+  medianUnlocksPerDrop: ['Unlocks per drop (median)', 'num'], relayHopsPerRelay: ['Relay hops per relay', 'num'],
+  trailCompletionRate: ['Trail completion', 'pct'], moderationFalseNegativeRate: ['Moderation misses', 'pct'],
+};
+const fmt = (v, kind) => v == null ? '–' : kind === 'pct' ? Math.round(v * 1000) / 10 + '%' : String(Math.round(v * 100) / 100);
+
 const tabs = {
+  async Metrics(v) {
+    const r = await api('/metrics?days=7');
+    v.append(h('h2', {}, 'Pilot targets · last 7 days'));
+    const grid = h('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px' });
+    for (const [key, [label, kind]] of Object.entries(LABELS)) {
+      const value = r.metrics[key], target = r.targets[key];
+      const lowerIsBetter = key === 'moderationFalseNegativeRate';
+      const ok = value != null && (lowerIsBetter ? value <= target : value >= target);
+      grid.append(h('div', { class: 'card', style: 'flex-direction:column;gap:4px' },
+        h('div', { class: 'meta' }, label),
+        h('div', { style: 'font:600 30px Georgia,serif;color:' + (value == null ? 'var(--muted)' : ok ? 'var(--mint)' : 'var(--amber)') }, fmt(value, kind)),
+        h('div', { class: 'meta' }, 'target ' + (lowerIsBetter ? '< ' : '≥ ') + fmt(target, kind))));
+    }
+    v.append(grid, h('div', { class: 'meta', style: 'margin-top:8px' },
+      (r.metrics.newUsers ?? 0) + ' new users · ' + (r.metrics.wau ?? 0) + ' weekly actives'));
+    v.append(h('h2', {}, 'Why unlocks fail'));
+    v.append(r.unlockFailures.length ? h('div', { class: 'row' }, r.unlockFailures.map((f) => h('span', { class: 'pill' }, f.reason + ': ' + f.count))) : h('div', { class: 'meta' }, 'No failed attempts yet.'));
+  },
   async Queue(v) {
     const q = await api('/queue');
     v.append(h('h2', {}, 'Drops awaiting review (' + q.drops.length + ')'));
@@ -121,7 +147,7 @@ const tabs = {
       h('div', { class: 'row' }, h('a', { href: x.url, target: '_blank', style: 'color:var(--ember)' }, x.url)))));
   },
 };
-let current = 'Queue';
+let current = 'Metrics';
 async function render() {
   $('#tabs').replaceChildren(...Object.keys(tabs).map((t) => h('button', { class: t === current ? 'on' : '', onclick: () => { current = t; render(); } }, t)));
   const v = h('div'); $('#view').replaceChildren(v);

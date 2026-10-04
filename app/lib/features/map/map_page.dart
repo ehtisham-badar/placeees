@@ -8,6 +8,7 @@ import '../../core/api/trace_api.dart';
 import '../../core/auth/session.dart';
 import '../../core/config.dart';
 import '../../core/api/signature.dart';
+import '../../core/analytics.dart';
 import '../../core/events.dart';
 import '../../core/alerts/nearby_alerts.dart';
 import '../../core/widgets/home_summary.dart';
@@ -69,6 +70,10 @@ class _MapViewState extends State<_MapView> {
     _events.addListener(_onDataChanged);
     _location.start();
     _loadCarrying();
+    // The map is the app's home: a session starts here.
+    context.read<Analytics>()
+      ..track('app_open')
+      ..track('map_view');
     WidgetsBinding.instance.addPostFrameCallback((_) => _onLocation());
   }
 

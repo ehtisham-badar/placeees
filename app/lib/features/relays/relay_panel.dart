@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/analytics.dart';
 import '../../core/api/api_error.dart';
 import '../../core/api/signature.dart';
 import '../../core/api/trace_api.dart';
@@ -36,6 +37,7 @@ class _RelayPanelState extends State<RelayPanel> {
       final fix = await location.freshFix(maxAge: const Duration(seconds: 5));
       if (fix == null) throw const ApiError('low_accuracy');
       final deadline = await api.pickUpRelay(widget.dropId, fix);
+      if (mounted) context.read<Analytics>().track('relay_picked');
       HapticFeedback.heavyImpact();
       messenger.showSnackBar(SnackBar(
         content: Text('It’s in your pocket. Leave it at least 1 km away by ${DateFormat.MMMd().format(deadline)}.'),

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'app.dart';
 import 'core/alerts/nearby_alerts.dart';
+import 'core/analytics.dart';
 import 'core/api/demo_api.dart';
 import 'core/api/live_api.dart';
 import 'core/api/trace_api.dart';
@@ -26,6 +27,7 @@ void main() {
     MultiProvider(
       providers: [
         Provider<TraceApi>.value(value: api),
+        Provider<Analytics>(create: (_) => Analytics(api), dispose: (_, a) => a.dispose()),
         ChangeNotifierProvider(create: (_) => Session(api)..restore()),
         ChangeNotifierProvider(create: (_) => LocationService()),
         ChangeNotifierProvider(create: (_) => DataEvents()),

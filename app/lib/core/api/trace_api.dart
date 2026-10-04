@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'conditions.dart';
+import '../analytics.dart' show AppEvent;
 import 'models.dart';
 import 'signature.dart';
 import 'social.dart';
@@ -64,6 +65,9 @@ abstract class TraceApi {
   Future<double> dropRelay(String dropId, LocationFix fix, {String? note});
   Future<List<CarriedRelay>> carrying();
   Future<RelayJourney> relayJourney(String dropId);
+
+  // Metrics (§11)
+  Future<void> track(List<AppEvent> events);
 
   // Venues (F-16)
   Future<Venue> venue(String code);

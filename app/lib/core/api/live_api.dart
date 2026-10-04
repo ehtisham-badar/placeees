@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
+import '../analytics.dart' show AppEvent;
 import '../integrity/integrity_service.dart';
 import 'api_error.dart';
 import 'conditions.dart';
@@ -241,6 +242,16 @@ class LiveApi implements TraceApi {
   @override
   Future<RelayJourney> relayJourney(String dropId) async =>
       RelayJourney.fromJson(await _send('GET', '/v1/relays/$dropId/journey') as Map<String, dynamic>);
+
+  @override
+  Future<void> track(List<AppEvent> events) async {
+    if (token == null || events.isEmpty) return;
+    await _send('POST', '/v1/events', body: {
+      'events': [
+        for (final e in events) {'name': e.name, 'at': e.at.toUtc().toIso8601String(), 'props': ?e.props},
+      ],
+    });
+  }
 
   @override
   Future<Venue> venue(String code) async =>

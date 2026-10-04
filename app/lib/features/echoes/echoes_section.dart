@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/analytics.dart';
 import '../../core/api/api_error.dart';
 import '../../core/api/social.dart';
 import '../../core/api/trace_api.dart';
@@ -61,6 +62,7 @@ class _EchoesSectionState extends State<EchoesSection> {
       final fix = await location.freshFix(maxAge: const Duration(seconds: 5));
       if (fix == null) throw const ApiError('low_accuracy');
       final echo = await api.postEcho(widget.dropId, _input.text, fix);
+      if (mounted) context.read<Analytics>().track('echo_created');
       HapticFeedback.mediumImpact();
       _input.clear();
       setState(() => _echoes = [...?_echoes, echo]);

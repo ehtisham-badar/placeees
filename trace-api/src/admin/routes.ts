@@ -7,6 +7,7 @@ import { config } from '../config.js';
 import { sql } from '../db/client.js';
 import { AppError, notFound } from '../lib/errors.js';
 import { signedReadUrl } from '../media/r2.js';
+import { pilotMetrics } from '../metrics/routes.js';
 
 function tokenMatches(given: string | undefined): boolean {
   if (!config.ADMIN_TOKEN || !given) return false;
@@ -141,6 +142,11 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!row) throw notFound();
     forgetBanState(id);
     return { ok: true };
+  });
+
+  app.get('/v1/admin/metrics', async (req) => {
+    const { days } = z.object({ days: z.coerce.number().int().min(1).max(90).default(7) }).parse(req.query);
+    return pilotMetrics(days);
   });
 
   app.get('/v1/admin/integrity', async () => {

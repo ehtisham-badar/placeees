@@ -15,6 +15,7 @@ import { relayRoutes } from './relays/routes.js';
 import { safetyRoutes } from './safety/routes.js';
 import { thenNowRoutes } from './thennow/routes.js';
 import { trailRoutes } from './trails/routes.js';
+import { eventRoutes } from './metrics/routes.js';
 import { userRoutes } from './users/routes.js';
 import { venueRoutes } from './venues/routes.js';
 
@@ -61,5 +62,6 @@ export function buildApp() {
   app.register(attestRoutes);
   app.register(adminRoutes);
   app.register(venueRoutes);
+  app.register(eventRoutes);
   return app;
 }
