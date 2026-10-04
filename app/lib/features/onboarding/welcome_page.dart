@@ -14,7 +14,7 @@ import '../../core/theme/tokens.dart';
 import '../../ui/buttons.dart';
 import '../../ui/pulse_rings.dart';
 
-enum _Provider { apple, google, demo }
+enum _Provider { apple, google, demo, dev }
 
 class WelcomePage extends StatefulWidget {
   const WelcomePage({super.key});
@@ -40,10 +40,13 @@ class _WelcomePageState extends State<WelcomePage> with SingleTickerProviderStat
     try {
       final result = switch (provider) {
         _Provider.demo => await session.api.signInDemo('demo'),
+        _Provider.dev => await session.api.signInDemo(await _devName() ?? (throw const _Cancelled())),
         _Provider.apple => await session.api.signInWithApple(await _appleToken()),
         _Provider.google => await session.api.signInWithGoogle(await _googleToken()),
       };
       await session.completeSignIn(result);
+    } on _Cancelled {
+      // closed the name prompt
     } on ApiError catch (e) {
       _toast(e.message);
     } on SignInWithAppleAuthorizationException catch (e) {
@@ -154,7 +157,48 @@ class _WelcomePageState extends State<WelcomePage> with SingleTickerProviderStat
     );
   }
 
+  /// Dev sign-in: the name is the account (same name = same account).
+  Future<String?> _devName() async {
+    final controller = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: TraceColors.surfaceHigh,
+        title: Text('Developer sign-in', style: serif(size: 22)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'Any name, e.g. ehtisham'),
+          onSubmitted: (v) => Navigator.pop(context, v.trim()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Continue')),
+        ],
+      ),
+    );
+    controller.dispose();
+    return name == null || name.isEmpty ? null : name;
+  }
+
   Widget _buttons() {
+    if (AppConfig.devLogin && !AppConfig.isDemo) {
+      return Column(
+        children: [
+          PrimaryButton(
+            label: 'Developer sign-in',
+            icon: Icons.terminal_rounded,
+            loading: _busy == _Provider.dev,
+            onPressed: _busy == null ? () => _signIn(_Provider.dev) : null,
+          ),
+          const SizedBox(height: Space.sm + 4),
+          Text(
+            'Connected to ${AppConfig.apiUrl}',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: TraceColors.textFaint),
+          ),
+        ],
+      );
+    }
     if (AppConfig.isDemo) {
       return Column(
         children: [
@@ -222,4 +266,8 @@ class _AppleButton extends StatelessWidget {
       ),
     );
   }
+}
+
+class _Cancelled implements Exception {
+  const _Cancelled();
 }

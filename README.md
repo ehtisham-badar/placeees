@@ -40,6 +40,20 @@ flutter run --dart-define=TRACE_API_URL=http://localhost:3000
 
 (Android emulator: use `http://10.0.2.2:3000`.)
 
+### On a real Android phone, against the API on your Mac
+
+Phone and Mac on the same Wi-Fi; start the API with `ALLOW_DEV_LOGIN=true`, then:
+
+```bash
+cd app
+ORG_GRADLE_PROJECT_devCleartext=true flutter build apk --release \
+  --dart-define=TRACE_API_URL=http://<mac-lan-ip>:3000 --dart-define=DEV_LOGIN=true
+flutter install --release
+```
+
+`DEV_LOGIN` replaces Apple/Google sign-in with a name-only developer sign-in, and `devCleartext`
+allows plain HTTP to the Mac. Store builds set neither, so they stay HTTPS-only.
+
 ### Configuration
 
 | Where | Key | Purpose |

@@ -29,6 +29,10 @@ android {
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "app.trace.mobile"
+        // Plain HTTP only for local testing against a dev API on the LAN:
+        //   ORG_GRADLE_PROJECT_devCleartext=true flutter build apk ...
+        // Store builds never set it, so they stay HTTPS-only.
+        manifestPlaceholders["usesCleartextTraffic"] = (project.findProperty("devCleartext") == "true").toString()
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

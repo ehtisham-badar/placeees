@@ -28,5 +28,8 @@ class AppConfig {
   static bool get firebaseConfigured =>
       firebaseApiKey.isNotEmpty && firebaseAndroidAppId.isNotEmpty && firebaseSenderId.isNotEmpty && firebaseProjectId.isNotEmpty;
 
+  /// Local testing against a dev API: shows a name-only sign-in (the API needs ALLOW_DEV_LOGIN).
+  static const devLogin = bool.fromEnvironment('DEV_LOGIN');
+
   static bool get isDemo => apiUrl.isEmpty;
 }
