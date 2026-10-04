@@ -551,8 +551,8 @@ trace-api/
 - [x] F-12 Circles
 
 ### Week 8–9 — Signature features
-- [ ] F-13 Relay drops + journey view
-- [ ] F-14 Then/Now overlay camera
+- [x] F-13 Relay drops + journey view
+- [x] F-14 Then/Now overlay camera
 
 ### Week 10 — Surfaces & hardening
 - [ ] F-15 Widgets + region-monitoring notifications
@@ -627,3 +627,9 @@ trace-api/
 | 2026-10-05 | Circle owners can't leave; no kick/delete in the MVP | Smallest safe surface; revisit after the pilot |
 | 2026-10-05 | School exclusion zones apply to public drops only; home zone applies to all | Matches §5 F-02 wording |
 | 2026-10-05 | A drop goes to a circle or to named recipients, never both | Avoids ambiguous visibility |
+| 2026-10-05 | Relays can't be picked up by their creator, and must be unlocked first | Carrying is for finders |
+| 2026-10-05 | A user carries at most 3 relays at once | Stops hoarding |
+| 2026-10-05 | Relay journey points are fuzzed like map markers (current spot matches the map circle) | A journey must never pinpoint where the relay rests now |
+| 2026-10-05 | Relays are always public (no capsule, circle or recipients) | Matches "travelling drop" intent; simpler visibility |
+| 2026-10-05 | Background jobs share one minute tick (`jobs/index.ts`): capsules, relay returns, deadline warnings | Each job claims rows atomically |
+| 2026-10-05 | Then/Now alignment tolerance ±5° on heading and pitch; pitch from the accelerometer | Matches spec; no gyro fusion needed at this tolerance |

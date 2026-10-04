@@ -21,7 +21,7 @@ export const CAPSULE_MIN_MS = 24 * 3600_000;
 export const CAPSULE_MAX_MS = 25 * 365.25 * 24 * 3600_000;
 export const MAX_RECIPIENTS = 20;
 
-export type DropType = 'photo' | 'text' | 'voice';
+export type DropType = 'photo' | 'text' | 'voice' | 'then_now';
 
 export interface CreateDropInput {
   type: DropType;
@@ -35,6 +35,9 @@ export interface CreateDropInput {
   unlockAt?: Date;
   recipientHandles?: string[];
   circleId?: string;
+  isRelay: boolean;
+  captureHeading?: number;
+  capturePitch?: number;
 }
 
 /** Drops this user may see: approved (or their own), not blocked either way, not being carried. */
@@ -99,6 +102,13 @@ export async function createDrop(userId: string, input: CreateDropInput) {
     if (!ownsMediaKey(userId, input.mediaKey)) throw forbiddenMedia();
   }
 
+  if (input.type === 'then_now' && (input.captureHeading == null || input.capturePitch == null)) {
+    throw new AppError('angle_required', 422);
+  }
+  // A relay travels in public; it can't also be sealed, private or addressed.
+  if (input.isRelay && (input.unlockAt || input.circleId || input.recipientHandles?.length)) {
+    throw new AppError('relay_must_be_public', 422);
+  }
   if (input.unlockAt) {
     const ahead = input.unlockAt.getTime() - Date.now();
     if (ahead < CAPSULE_MIN_MS) throw new AppError('capsule_too_soon', 422);
@@ -119,12 +129,15 @@ export async function createDrop(userId: string, input: CreateDropInput) {
 
   const [drop] = await sql<{ id: string; status: string; createdAt: Date }[]>`
     INSERT INTO drops (creator_id, geo, geohash7, type, body, media_key, teaser, is_anonymous,
-                       conditions, conditions_revealed, unlock_at, visibility, recipient_ids, circle_id)
+                       conditions, conditions_revealed, unlock_at, visibility, recipient_ids, circle_id,
+                       is_relay, capture_heading, capture_pitch)
     VALUES (${userId}, ST_MakePoint(${p.lng}, ${p.lat})::geography, ${cell}, ${input.type},
             ${input.body?.trim() || null}, ${input.mediaKey ?? null}, ${input.teaser?.trim() || null},
             ${input.isAnonymous}, ${input.conditions ? sql.json(input.conditions) : null},
             ${input.conditions ? input.revealConditions : false}, ${input.unlockAt ?? null},
-            ${visibility}, ${recipientIds.length ? recipientIds : null}, ${input.circleId ?? null})
+            ${visibility}, ${recipientIds.length ? recipientIds : null}, ${input.circleId ?? null},
+            ${input.isRelay}, ${input.type === 'then_now' ? input.captureHeading! : null},
+            ${input.type === 'then_now' ? input.capturePitch! : null})
     RETURNING id, status, created_at`;
   if (!drop) throw new AppError('internal', 500);
 
@@ -148,7 +161,8 @@ function forbiddenMedia() {
 }
 
 async function screenDrop(dropId: string, input: CreateDropInput) {
-  const imageUrl = input.type === 'photo' && input.mediaKey ? await signedReadUrl(input.mediaKey) : undefined;
+  const imageUrl =
+    (input.type === 'photo' || input.type === 'then_now') && input.mediaKey ? await signedReadUrl(input.mediaKey) : undefined;
   const verdict = await moderate({ text: [input.teaser, input.body].filter(Boolean).join('\n'), imageUrl });
   await sql`
     UPDATE drops
@@ -178,6 +192,7 @@ interface NearbyRow {
   trailTotal: number | null;
   circleId: string | null;
   circleName: string | null;
+  relayHops: number;
 }
 
 export async function nearbyDrops(userId: string, lat: number, lng: number, radius: number) {
@@ -190,7 +205,9 @@ export async function nearbyDrops(userId: string, lat: number, lng: number, radi
            EXISTS (SELECT 1 FROM unlocks u WHERE u.drop_id = d.id AND u.user_id = ${userId}) AS unlocked,
            t.id AS trail_id, t.title AS trail_title, ts.seq AS trail_seq,
            (SELECT count(*)::int FROM trail_stops x WHERE x.trail_id = t.id) AS trail_total,
-           c.id AS circle_id, c.name AS circle_name
+           c.id AS circle_id, c.name AS circle_name,
+           (SELECT count(*)::int FROM relay_hops h WHERE h.drop_id = d.id AND h.dropped_at IS NOT NULL
+              AND NOT h.returned) AS relay_hops
     FROM drops d
     LEFT JOIN trail_stops ts ON ts.drop_id = d.id
     LEFT JOIN trails t ON t.id = ts.trail_id
@@ -218,6 +235,7 @@ export async function nearbyDrops(userId: string, lat: number, lng: number, radi
       capsuleUnlockAt: r.unlockAt,
       forYou: r.forMe,
       relay: r.isRelay,
+      relayHops: r.isRelay ? r.relayHops : null,
       trail: r.trailId ? { id: r.trailId, title: r.trailTitle, seq: r.trailSeq, total: r.trailTotal } : null,
       circle: r.circleId ? { id: r.circleId, name: r.circleName } : null,
     },
@@ -248,6 +266,13 @@ interface DropRow {
   trailCompletedAt: Date | null;
   circleId: string | null;
   circleName: string | null;
+  isRelay: boolean;
+  relayCarrierId: string | null;
+  relayHops: number;
+  carriedBefore: boolean;
+  carryDeadline: Date | null;
+  captureHeading: number | null;
+  capturePitch: number | null;
 }
 
 async function loadDrop(userId: string, dropId: string): Promise<DropRow | undefined> {
@@ -261,7 +286,13 @@ async function loadDrop(userId: string, dropId: string): Promise<DropRow | undef
            (SELECT clue FROM trail_stops x WHERE x.trail_id = t.id AND x.seq = ts.seq + 1) AS next_clue,
            (SELECT completed_at FROM trail_completions x WHERE x.trail_id = t.id AND x.user_id = ${userId})
              AS trail_completed_at,
-           c.id AS circle_id, c.name AS circle_name
+           c.id AS circle_id, c.name AS circle_name,
+           d.is_relay, d.relay_carrier_id, d.capture_heading, d.capture_pitch,
+           (SELECT count(*)::int FROM relay_hops h WHERE h.drop_id = d.id AND h.dropped_at IS NOT NULL
+              AND NOT h.returned) AS relay_hops,
+           EXISTS (SELECT 1 FROM relay_hops h WHERE h.drop_id = d.id AND h.carrier_id = ${userId}) AS carried_before,
+           (SELECT deadline_at FROM relay_hops h WHERE h.drop_id = d.id AND h.carrier_id = ${userId}
+              AND h.dropped_at IS NULL) AS carry_deadline
     FROM drops d
     JOIN users u ON u.id = d.creator_id
     LEFT JOIN trail_stops ts ON ts.drop_id = d.id
@@ -298,6 +329,17 @@ export async function serializeContent(row: DropRow, userId: string) {
         }
       : null,
     circle: row.circleId ? { id: row.circleId, name: row.circleName } : null,
+    relay: row.isRelay
+      ? {
+          hops: row.relayHops,
+          carrying: row.relayCarrierId === userId,
+          carryDeadline: row.carryDeadline,
+          // Anyone who opened it (except its creator and past carriers) can carry it on.
+          canPickUp: !mine && !row.carriedBefore && row.relayCarrierId == null && row.unlockedAt != null,
+        }
+      : null,
+    thenNow:
+      row.type === 'then_now' ? { captureHeading: row.captureHeading, capturePitch: row.capturePitch } : null,
   };
 }
 

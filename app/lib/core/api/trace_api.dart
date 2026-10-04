@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'conditions.dart';
 import 'models.dart';
+import 'signature.dart';
 import 'social.dart';
 
 /// Everything the app needs from the backend. Implemented by [LiveApi] and [DemoApi].
@@ -33,6 +34,8 @@ abstract class TraceApi {
     DateTime? unlockAt,
     List<String> recipientHandles = const [],
     String? circleId,
+    bool isRelay = false,
+    CaptureAngle? angle,
   });
 
   /// The true point of a drop once you're within 100 m of it (compass, F-07).
@@ -54,6 +57,16 @@ abstract class TraceApi {
   Future<Circle> joinCircle(String code);
   Future<Circle> circle(String circleId);
   Future<void> leaveCircle(String circleId);
+
+  // Relays (F-13)
+  Future<DateTime> pickUpRelay(String dropId, LocationFix fix);
+  Future<double> dropRelay(String dropId, LocationFix fix, {String? note});
+  Future<List<CarriedRelay>> carrying();
+  Future<RelayJourney> relayJourney(String dropId);
+
+  // Then/Now (F-14)
+  Future<List<NowPhoto>> nowPhotos(String dropId);
+  Future<NowPhoto> postNowPhoto(String dropId, Uint8List jpeg, LocationFix fix, {double? heading, double? pitch});
 
   Future<void> reportDrop(String dropId, {String? reason});
   Future<void> blockAuthor(String dropId);

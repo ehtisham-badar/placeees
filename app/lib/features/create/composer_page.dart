@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/api/api_error.dart';
 import '../../core/api/models.dart';
+import '../../core/api/signature.dart';
 import '../../core/api/social.dart';
 import '../../core/api/trace_api.dart';
 import '../../core/location/location_service.dart';
@@ -18,6 +19,7 @@ import '../../ui/drop_glyph.dart';
 import '../../ui/pulse_rings.dart';
 import 'image_compress.dart';
 import 'rules_section.dart';
+import 'then_now_field.dart';
 
 const _maxCreateAccuracy = 65.0;
 
@@ -34,6 +36,8 @@ class _ComposerPageState extends State<ComposerPage> {
   final _body = TextEditingController();
   final _teaser = TextEditingController();
   Uint8List? _photo;
+  CaptureAngle? _angle;
+  bool _relay = false;
   bool _anonymous = false;
   bool _posting = false;
   bool _done = false;
@@ -67,12 +71,16 @@ class _ComposerPageState extends State<ComposerPage> {
   bool get _hasContent => switch (_type) {
         DropType.text => _body.text.trim().isNotEmpty,
         DropType.photo => _photo != null,
+        DropType.thenNow => _photo != null && _angle != null,
         DropType.voice => false,
       };
 
   Future<void> _pickPhoto() async {
     final picker = ImagePicker();
-    final source = picker.supportsImageSource(ImageSource.camera) ? ImageSource.camera : ImageSource.gallery;
+    // Then/Now starts from an old photo; ordinary photos are taken here and now.
+    final source = _type != DropType.thenNow && picker.supportsImageSource(ImageSource.camera)
+        ? ImageSource.camera
+        : ImageSource.gallery;
     final XFile? file;
     try {
       file = await picker.pickImage(source: source, requestFullMetadata: false);
@@ -99,14 +107,16 @@ class _ComposerPageState extends State<ComposerPage> {
         type: _type,
         fix: fix,
         body: _body.text.trim().isEmpty ? null : _body.text.trim(),
-        photoJpeg: _type == DropType.photo ? _photo : null,
+        photoJpeg: _type == DropType.photo || _type == DropType.thenNow ? _photo : null,
+        angle: _type == DropType.thenNow ? _angle : null,
+        isRelay: _relay && _type != DropType.thenNow,
         teaser: _teaser.text.trim().isEmpty ? null : _teaser.text.trim(),
         isAnonymous: _anonymous,
         conditions: _rules.conditions(_tz),
         revealConditions: _rules.reveal,
-        unlockAt: _rules.capsuleAt,
-        recipientHandles: _rules.recipients,
-        circleId: _rules.recipients.isEmpty ? _circleId : null,
+        unlockAt: _relay ? null : _rules.capsuleAt,
+        recipientHandles: _relay ? const [] : _rules.recipients,
+        circleId: _relay || _rules.recipients.isNotEmpty ? null : _circleId,
       );
       HapticFeedback.heavyImpact();
       setState(() => _done = true);
@@ -168,6 +178,14 @@ class _ComposerPageState extends State<ComposerPage> {
                                   caption: _body,
                                   onPick: _pickPhoto,
                                 ),
+                              DropType.thenNow => ThenNowField(
+                                  key: const ValueKey('thennow'),
+                                  photo: _photo,
+                                  caption: _body,
+                                  angle: _angle,
+                                  onPick: _pickPhoto,
+                                  onAngle: (a) => setState(() => _angle = a),
+                                ),
                               DropType.voice => const SizedBox.shrink(),
                             },
                           ),
@@ -189,7 +207,11 @@ class _ComposerPageState extends State<ComposerPage> {
                             style: Theme.of(context).textTheme.bodySmall?.copyWith(color: TraceColors.textFaint),
                           ),
                           const SizedBox(height: Space.lg),
-                          if (_circles.isNotEmpty) ...[
+                          if (_type != DropType.thenNow) ...[
+                            _RelayToggle(value: _relay, onChanged: (v) => setState(() => _relay = v)),
+                            const SizedBox(height: Space.sm + 4),
+                          ],
+                          if (_circles.isNotEmpty && !_relay) ...[
                             _AudiencePicker(
                               circles: _circles,
                               selected: _rules.recipients.isEmpty ? _circleId : null,
@@ -200,7 +222,7 @@ class _ComposerPageState extends State<ComposerPage> {
                           ],
                           WaitSection(rules: _rules, tz: _tz, onChanged: _rebuild),
                           const SizedBox(height: Space.sm + 4),
-                          CapsuleSection(rules: _rules, onChanged: _rebuild),
+                          if (!_relay) CapsuleSection(rules: _rules, onChanged: _rebuild),
                           const SizedBox(height: Space.sm + 4),
                           _AnonymousToggle(value: _anonymous, onChanged: (v) => setState(() => _anonymous = v)),
                         ],
@@ -334,6 +356,8 @@ class _TypePicker extends StatelessWidget {
   final DropType value;
   final ValueChanged<DropType> onChanged;
 
+  static const _order = [DropType.text, DropType.photo, DropType.thenNow, DropType.voice];
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -341,33 +365,33 @@ class _TypePicker extends StatelessWidget {
       decoration: BoxDecoration(color: TraceColors.surface, borderRadius: BorderRadius.circular(Radii.md)),
       child: Row(
         children: [
-          for (final t in DropType.values)
+          for (final t in _order)
             Expanded(
               child: Pressable(
                 onTap: t == DropType.voice ? null : () => onChanged(t),
                 child: AnimatedContainer(
                   duration: Motion.medium,
                   curve: Motion.curve,
-                  height: 44,
+                  height: 60,
                   decoration: BoxDecoration(
                     color: t == value ? TraceColors.surfaceHigh : Colors.transparent,
                     borderRadius: BorderRadius.circular(Radii.sm),
                     border: Border.all(color: t == value ? TraceColors.line : Colors.transparent),
                   ),
-                  child: Row(
+                  child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(
                         dropIcon(t),
-                        size: 18,
+                        size: 20,
                         color: t == value ? TraceColors.ember : t == DropType.voice ? TraceColors.textFaint : TraceColors.textMuted,
                       ),
-                      const SizedBox(width: 6),
+                      const SizedBox(height: 4),
                       Text(
-                        t == DropType.voice ? 'Voice · soon' : dropNoun(t),
+                        t == DropType.voice ? 'Soon' : dropNoun(t),
                         style: TextStyle(
                           fontWeight: FontWeight.w700,
-                          fontSize: 13,
+                          fontSize: 12,
                           color: t == value ? TraceColors.text : t == DropType.voice ? TraceColors.textFaint : TraceColors.textMuted,
                         ),
                       ),
@@ -376,6 +400,46 @@ class _TypePicker extends StatelessWidget {
                 ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Relays travel from finder to finder (spec F-13).
+class _RelayToggle extends StatelessWidget {
+  const _RelayToggle({required this.value, required this.onChanged});
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: Motion.medium,
+      padding: const EdgeInsets.symmetric(horizontal: Space.md, vertical: 10),
+      decoration: BoxDecoration(
+        color: TraceColors.surface,
+        borderRadius: BorderRadius.circular(Radii.md),
+        border: Border.all(color: value ? TraceColors.ember.withValues(alpha: 0.45) : TraceColors.line),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.sync_alt_rounded, color: value ? TraceColors.ember : TraceColors.textMuted),
+          const SizedBox(width: Space.sm + 4),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Make it a relay', style: TextStyle(fontWeight: FontWeight.w700)),
+                Text(
+                  'Finders can carry it on, 1 km at a time, and you can follow its journey.',
+                  style: TextStyle(color: TraceColors.textMuted, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          Switch.adaptive(value: value, onChanged: onChanged, activeTrackColor: TraceColors.ember),
         ],
       ),
     );

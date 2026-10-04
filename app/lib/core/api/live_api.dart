@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'api_error.dart';
 import 'conditions.dart';
 import 'models.dart';
+import 'signature.dart';
 import 'social.dart';
 import 'trace_api.dart';
 
@@ -102,17 +103,12 @@ class LiveApi implements TraceApi {
     DateTime? unlockAt,
     List<String> recipientHandles = const [],
     String? circleId,
+    bool isRelay = false,
+    CaptureAngle? angle,
   }) async {
-    String? mediaKey;
-    if (photoJpeg != null) {
-      final presign = await _send('POST', '/v1/media/presign', body: {'contentType': 'image/jpeg'}) as Map<String, dynamic>;
-      final headers = (presign['headers'] as Map).cast<String, String>();
-      final upload = await http.put(Uri.parse(presign['url'] as String), headers: headers, body: photoJpeg);
-      if (upload.statusCode >= 300) throw const ApiError('upload_failed');
-      mediaKey = presign['key'] as String;
-    }
+    final mediaKey = photoJpeg == null ? null : await _upload(photoJpeg);
     final j = await _send('POST', '/v1/drops', body: {
-      'type': type.name,
+      'type': type.wire,
       'body': ?(body == null || body.isEmpty ? null : body),
       'mediaKey': ?mediaKey,
       'teaser': ?(teaser == null || teaser.isEmpty ? null : teaser),
@@ -125,6 +121,8 @@ class LiveApi implements TraceApi {
       if (unlockAt != null) 'unlockAt': unlockAt.toUtc().toIso8601String(),
       if (recipientHandles.isNotEmpty) 'recipientHandles': recipientHandles,
       'circleId': ?circleId,
+      if (isRelay) 'isRelay': true,
+      if (angle != null) ...{'captureHeading': angle.heading, 'capturePitch': angle.pitch},
     }) as Map<String, dynamic>;
     return j['id'] as String;
   }
@@ -194,6 +192,58 @@ class LiveApi implements TraceApi {
 
   @override
   Future<void> leaveCircle(String circleId) => _send('POST', '/v1/circles/$circleId/leave');
+
+  /// Uploads a JPEG through a pre-signed URL and returns its media key.
+  Future<String> _upload(Uint8List jpeg) async {
+    final presign = await _send('POST', '/v1/media/presign', body: {'contentType': 'image/jpeg'}) as Map<String, dynamic>;
+    final headers = (presign['headers'] as Map).cast<String, String>();
+    final upload = await http.put(Uri.parse(presign['url'] as String), headers: headers, body: jpeg);
+    if (upload.statusCode >= 300) throw const ApiError('upload_failed');
+    return presign['key'] as String;
+  }
+
+  @override
+  Future<DateTime> pickUpRelay(String dropId, LocationFix fix) async {
+    final j = await _send('POST', '/v1/relays/$dropId/pickup', body: {'location': fix.toJson()}) as Map<String, dynamic>;
+    return DateTime.parse(j['deadlineAt'] as String);
+  }
+
+  @override
+  Future<double> dropRelay(String dropId, LocationFix fix, {String? note}) async {
+    final j = await _send('POST', '/v1/relays/$dropId/drop', body: {
+      'location': fix.toJson(),
+      if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+    }) as Map<String, dynamic>;
+    return (j['distanceM'] as num).toDouble();
+  }
+
+  @override
+  Future<List<CarriedRelay>> carrying() async {
+    final j = await _send('GET', '/v1/relays/carrying') as Map<String, dynamic>;
+    return [for (final r in j['relays'] as List) CarriedRelay.fromJson(r as Map<String, dynamic>)];
+  }
+
+  @override
+  Future<RelayJourney> relayJourney(String dropId) async =>
+      RelayJourney.fromJson(await _send('GET', '/v1/relays/$dropId/journey') as Map<String, dynamic>);
+
+  @override
+  Future<List<NowPhoto>> nowPhotos(String dropId) async {
+    final j = await _send('GET', '/v1/drops/$dropId/now-photos') as Map<String, dynamic>;
+    return [for (final p in j['photos'] as List) NowPhoto.fromJson(p as Map<String, dynamic>)];
+  }
+
+  @override
+  Future<NowPhoto> postNowPhoto(String dropId, Uint8List jpeg, LocationFix fix, {double? heading, double? pitch}) async {
+    final key = await _upload(jpeg);
+    final j = await _send('POST', '/v1/drops/$dropId/now-photos', body: {
+      'mediaKey': key,
+      'location': fix.toJson(),
+      'heading': ?heading,
+      'pitch': ?pitch,
+    }) as Map<String, dynamic>;
+    return NowPhoto(id: j['id'] as String, bytes: jpeg, createdAt: DateTime.parse(j['createdAt'] as String), mine: true, pending: true);
+  }
 
   @override
   Future<void> reportDrop(String dropId, {String? reason}) =>

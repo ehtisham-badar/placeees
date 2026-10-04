@@ -64,7 +64,7 @@ void main() {
       expect(drops, isNotEmpty);
 
       final far = drops.firstWhere((d) => d.teaser == 'Exam week survival kit.');
-      expect(() => api.unlock(far.id, fixAt(here)), throwsA(isA<ApiError>().having((e) => e.code, 'code', 'too_far')));
+      await expectLater(api.unlock(far.id, fixAt(here)), throwsA(isA<ApiError>().having((e) => e.code, 'code', 'too_far')));
 
       final there = api.truePointOf(far.id)!;
       final content = await api.unlock(far.id, fixAt(there));
@@ -78,9 +78,7 @@ void main() {
       // Demo weather is always clear, so the rain drop never opens.
       final rain = drops.firstWhere((d) => d.conditionKinds.contains('weather'));
       expect(rain.conditions, isNull, reason: 'its rule is not revealed');
-      expect(
-        () => api.unlock(rain.id, fixAt(api.truePointOf(rain.id)!)),
-        throwsA(isA<ApiError>().having((e) => e.code, 'code', 'condition_locked')),
+      await expectLater(api.unlock(rain.id, fixAt(api.truePointOf(rain.id)!)), throwsA(isA<ApiError>().having((e) => e.code, 'code', 'condition_locked')),
       );
       final night = drops.firstWhere((d) => d.conditionKinds.contains('night'));
       expect(night.conditions, isNotNull, reason: 'its rule is revealed');
@@ -91,9 +89,7 @@ void main() {
       final drops = await api.nearby(here.latitude, here.longitude);
       final capsule = drops.firstWhere((d) => d.forYou);
       expect(capsule.isSealed, isTrue);
-      expect(
-        () => api.unlock(capsule.id, fixAt(api.truePointOf(capsule.id)!)),
-        throwsA(isA<ApiError>().having((e) => e.code, 'code', 'capsule_locked')),
+      await expectLater(api.unlock(capsule.id, fixAt(api.truePointOf(capsule.id)!)), throwsA(isA<ApiError>().having((e) => e.code, 'code', 'capsule_locked')),
       );
     });
 
@@ -101,7 +97,7 @@ void main() {
       final api = DemoApi();
       final drops = await api.nearby(here.latitude, here.longitude);
       final far = drops.firstWhere((d) => d.teaser == 'Exam week survival kit.');
-      expect(() => api.nearHint(far.id, fixAt(here)), throwsA(isA<ApiError>()));
+      await expectLater(api.nearHint(far.id, fixAt(here)), throwsA(isA<ApiError>()));
       final truth = api.truePointOf(far.id)!;
       final hint = await api.nearHint(far.id, fixAt(offsetBy(truth, 0, 60)));
       expect(hint.point, truth);
@@ -111,14 +107,12 @@ void main() {
     test('rejects capsules sealed for less than a day', () async {
       final api = DemoApi();
       await api.nearby(here.latitude, here.longitude);
-      expect(
-        () => api.createDrop(
+      await expectLater(api.createDrop(
           type: DropType.text,
           fix: fixAt(here),
           body: 'hi',
           unlockAt: DateTime.now().add(const Duration(hours: 2)),
-        ),
-        throwsA(isA<ApiError>().having((e) => e.code, 'code', 'capsule_too_soon')),
+        ), throwsA(isA<ApiError>().having((e) => e.code, 'code', 'capsule_too_soon')),
       );
     });
   });

@@ -8,6 +8,7 @@ import 'api_error.dart';
 import 'conditions.dart';
 import 'geo.dart';
 import 'models.dart';
+import 'signature.dart';
 import 'social.dart';
 import 'sun.dart';
 import 'trace_api.dart';
@@ -25,6 +26,10 @@ class DemoApi implements TraceApi {
   final _completedAt = <String, DateTime>{};
   final _circles = <String, _DemoCircle>{};
   final _echoes = <String, List<Echo>>{};
+  final _carrying = <String, ({DateTime pickedAt, DateTime deadline, LatLng pickup})>{};
+  final _carriedBefore = <String>{};
+  final _hops = <String, List<_DemoHop>>{};
+  final _nowPhotos = <String, List<NowPhoto>>{};
   final _rng = math.Random();
   int _seq = 0;
 
@@ -72,11 +77,17 @@ class DemoApi implements TraceApi {
     return [
       for (final d in _drops.values)
         if (metersBetween(here, d.point) < 2000 && (!d.pending || d.mine) && _visible(d) && _trailOrderOk(d))
-          d.toNearby(_unlockedAt.containsKey(d.id), trail: _trailRef(d, content: false), circle: _circleRef(d)),
+          d.toNearby(
+            _unlockedAt.containsKey(d.id),
+            trail: _trailRef(d, content: false),
+            circle: _circleRef(d),
+            relayHops: _hops[d.id]?.length ?? 0,
+          ),
     ];
   }
 
-  bool _visible(_DemoDrop d) => d.mine || d.circleId == null || (_circles[d.circleId]?.joined ?? false);
+  bool _visible(_DemoDrop d) =>
+      !_carrying.containsKey(d.id) && (d.mine || d.circleId == null || (_circles[d.circleId]?.joined ?? false));
 
   (_DemoTrail, int)? _trailOf(String dropId) {
     for (final t in _trails.values) {
@@ -114,8 +125,22 @@ class DemoApi implements TraceApi {
     return c == null ? null : CircleRef(id: c.id, name: c.name);
   }
 
-  DropContent _content(_DemoDrop d) =>
-      d.toContent(_unlockedAt[d.id], trail: _trailRef(d, content: true), circle: _circleRef(d));
+  DropContent _content(_DemoDrop d) => d.toContent(
+        _unlockedAt[d.id],
+        trail: _trailRef(d, content: true),
+        circle: _circleRef(d),
+        relay: d.isRelay
+            ? RelayInfo(
+                hops: _hops[d.id]?.length ?? 0,
+                carrying: _carrying.containsKey(d.id),
+                carryDeadline: _carrying[d.id]?.deadline,
+                canPickUp: !d.mine &&
+                    !_carriedBefore.contains(d.id) &&
+                    !_carrying.containsKey(d.id) &&
+                    _unlockedAt.containsKey(d.id),
+              )
+            : null,
+      );
 
   @override
   Future<DropContent> unlock(String dropId, LocationFix fix) async {
@@ -159,8 +184,14 @@ class DemoApi implements TraceApi {
     DateTime? unlockAt,
     List<String> recipientHandles = const [],
     String? circleId,
+    bool isRelay = false,
+    CaptureAngle? angle,
   }) async {
     await _latency(900);
+    if (type == DropType.thenNow && angle == null) throw const ApiError('angle_required');
+    if (isRelay && (unlockAt != null || circleId != null || recipientHandles.isNotEmpty)) {
+      throw const ApiError('relay_must_be_public');
+    }
     if (circleId != null && recipientHandles.isNotEmpty) throw const ApiError('visibility_conflict');
     if (circleId != null && !(_circles[circleId]?.joined ?? false)) throw const ApiError('not_a_member');
     if (fix.accuracy > 65) throw const ApiError('low_accuracy');
@@ -188,6 +219,8 @@ class DemoApi implements TraceApi {
       revealed: revealConditions,
       capsuleUnlockAt: unlockAt,
       circleId: circleId,
+      isRelay: isRelay,
+      angle: angle,
     );
     _drops[d.id] = d;
     // Simulated moderation pass.
@@ -375,6 +408,116 @@ class DemoApi implements TraceApi {
   }
 
   @override
+  Future<DateTime> pickUpRelay(String dropId, LocationFix fix) async {
+    await _latency(600);
+    final d = _drops[dropId] ?? (throw const ApiError('not_found'));
+    if (!d.isRelay) throw const ApiError('not_a_relay');
+    if (d.mine) throw const ApiError('own_relay');
+    if (_carrying.containsKey(dropId)) throw const ApiError('already_carried');
+    if (_carriedBefore.contains(dropId)) throw const ApiError('carried_before');
+    if (!_unlockedAt.containsKey(dropId)) throw const ApiError('locked');
+    if (_carrying.length >= 3) throw const ApiError('carrying_limit');
+    if (metersBetween(fix.point, d.point) > unlockRadius(fix.accuracy)) throw const ApiError('too_far');
+    final now = DateTime.now();
+    final deadline = now.add(const Duration(days: 7));
+    _carrying[dropId] = (pickedAt: now, deadline: deadline, pickup: d.point);
+    _carriedBefore.add(dropId);
+    return deadline;
+  }
+
+  @override
+  Future<double> dropRelay(String dropId, LocationFix fix, {String? note}) async {
+    await _latency(700);
+    final carry = _carrying[dropId] ?? (throw const ApiError('not_carrying'));
+    if (fix.accuracy > 65) throw const ApiError('low_accuracy');
+    final distance = metersBetween(carry.pickup, fix.point);
+    if (distance < 1000) throw const ApiError('too_close');
+    final d = _drops[dropId]!;
+    d.point = fix.point;
+    _carrying.remove(dropId);
+    _hops.putIfAbsent(dropId, () => []).add(_DemoHop(
+          handle: _user.handle,
+          pickedAt: carry.pickedAt,
+          droppedAt: DateTime.now(),
+          from: carry.pickup,
+          to: fix.point,
+          note: note?.trim().isEmpty ?? true ? null : note!.trim(),
+        ));
+    return distance;
+  }
+
+  @override
+  Future<List<CarriedRelay>> carrying() async {
+    await _latency(200);
+    return [
+      for (final e in _carrying.entries)
+        CarriedRelay(
+          id: e.key,
+          teaser: _drops[e.key]?.teaser,
+          pickedAt: e.value.pickedAt,
+          deadlineAt: e.value.deadline,
+          pickup: e.value.pickup,
+        ),
+    ];
+  }
+
+  @override
+  Future<RelayJourney> relayJourney(String dropId) async {
+    await _latency(300);
+    final d = _drops[dropId] ?? (throw const ApiError('not_found'));
+    if (!d.isRelay) throw const ApiError('not_found');
+    final hops = _hops[dropId] ?? const <_DemoHop>[];
+    final origin = hops.isEmpty ? d.point : hops.first.from;
+    return RelayJourney(
+      origin: fuzzyCircle('$dropId:origin', origin).center,
+      originAt: d.createdAt,
+      originHandle: d.author,
+      totalDistanceM: hops.fold(0, (sum, h) => sum + metersBetween(h.from, h.to)),
+      carriedBy: _carrying.containsKey(dropId) ? _user.handle : null,
+      hops: [
+        for (final (i, h) in hops.indexed)
+          RelayHop(
+            handle: h.handle,
+            pickedAt: h.pickedAt,
+            droppedAt: h.droppedAt,
+            distanceM: metersBetween(h.from, h.to),
+            note: h.note,
+            // The resting point matches the map circle; earlier ones are fuzzed per hop.
+            to: i == hops.length - 1 && !_carrying.containsKey(dropId)
+                ? fuzzyCircle(dropId, h.to).center
+                : fuzzyCircle('$dropId:$i', h.to).center,
+          ),
+      ],
+    );
+  }
+
+  @override
+  Future<List<NowPhoto>> nowPhotos(String dropId) async {
+    await _latency(250);
+    final d = _drops[dropId] ?? (throw const ApiError('not_found'));
+    if (d.type != DropType.thenNow) throw const ApiError('not_found');
+    if (!d.mine && !_unlockedAt.containsKey(dropId)) throw const ApiError('locked');
+    return List.of(_nowPhotos[dropId] ?? const []);
+  }
+
+  @override
+  Future<NowPhoto> postNowPhoto(String dropId, Uint8List jpeg, LocationFix fix, {double? heading, double? pitch}) async {
+    await _latency(800);
+    final d = _drops[dropId] ?? (throw const ApiError('not_found'));
+    if (!d.mine && !_unlockedAt.containsKey(dropId)) throw const ApiError('locked');
+    if (metersBetween(fix.point, d.point) > unlockRadius(fix.accuracy)) throw const ApiError('too_far');
+    final photo = NowPhoto(
+      id: 'now-${_seq++}',
+      bytes: jpeg,
+      createdAt: DateTime.now(),
+      authorHandle: _user.handle,
+      mine: true,
+    );
+    _nowPhotos.putIfAbsent(dropId, () => []).insert(0, photo);
+    return photo;
+  }
+
+  @override
   Future<void> leaveCircle(String circleId) async {
     await _latency(300);
     final c = _circles[circleId] ?? (throw const ApiError('not_found'));
@@ -476,6 +619,42 @@ extension on DemoApi {
       members: ['zara', 'umar_and_aiza', 'hamza.shoots'],
     );
 
+    // A relay that has already travelled across the city.
+    final relay = add('relay-a', 250, 28, 'Pass it on: the travelling notebook.',
+        'Write a line in your head, carry this a kilometre, and leave it somewhere you love. '
+        'So far it has seen a book market, a bus stop and a rooftop.',
+        author: 'zara', unlocks: 9, age: const Duration(days: 20))
+      ..isRelay = true;
+    final legs = [
+      (offsetBy(here, 20, 9000), offsetBy(here, 60, 6000), 'noor', 'Left it at the book market.'),
+      (offsetBy(here, 60, 6000), offsetBy(here, 110, 3500), 'bilal', 'Rode the bus with it. Felt important.'),
+      (offsetBy(here, 110, 3500), offsetBy(here, 200, 1800), 'mehak', null),
+      (offsetBy(here, 200, 1800), relay.point, 'faris', 'Your turn.'),
+    ];
+    _hops['relay-a'] = [
+      for (final (i, (from, to, handle, note)) in legs.indexed)
+        _DemoHop(
+          handle: handle,
+          pickedAt: now.subtract(Duration(days: 16 - i * 4)),
+          droppedAt: now.subtract(Duration(days: 15 - i * 4)),
+          from: from,
+          to: to,
+          note: note,
+        ),
+    ];
+
+    // A Then/Now spot with a photo from 1965.
+    add('thennow-a', 170, 30, 'Mall Road, 1965.',
+        'My grandfather took this from exactly here. Same arches, fewer cars. Line it up and add yours.',
+        author: 'umar_and_aiza', unlocks: 14, age: const Duration(days: 40))
+      ..type = DropType.thenNow
+      ..mediaUrl = 'https://picsum.photos/seed/trace-1965/900/1200?grayscale'
+      ..angle = const CaptureAngle(heading: 135, pitch: 4);
+    _nowPhotos['thennow-a'] = [
+      NowPhoto(id: 'n1', url: 'https://picsum.photos/seed/trace-now-1/900/1200', createdAt: now.subtract(const Duration(days: 3)), authorHandle: 'hamza.shoots'),
+      NowPhoto(id: 'n2', url: 'https://picsum.photos/seed/trace-now-2/900/1200', createdAt: now.subtract(const Duration(days: 12)), authorHandle: 'mehak'),
+    ];
+
     _echoes['seed-0'] = [
       Echo(id: 'e1', body: 'Needed this today. Thank you, stranger.', createdAt: now.subtract(const Duration(days: 2)), authorHandle: 'faris'),
       Echo(id: 'e2', body: 'Sat here for ten minutes. The pigeons are indeed friendly.', createdAt: now.subtract(const Duration(hours: 30)), authorHandle: 'mehak'),
@@ -485,6 +664,17 @@ extension on DemoApi {
       Echo(id: 'e4', body: 'Did the whole hunt with my little brother. He found stop two first.', createdAt: now.subtract(const Duration(days: 1)), authorHandle: 'ayesha'),
     ];
   }
+}
+
+class _DemoHop {
+  _DemoHop({required this.handle, required this.pickedAt, required this.droppedAt, required this.from, required this.to, this.note});
+
+  final String? handle;
+  final DateTime pickedAt;
+  final DateTime droppedAt;
+  final LatLng from;
+  final LatLng to;
+  final String? note;
 }
 
 class _DemoTrail {
@@ -538,15 +728,19 @@ class _DemoDrop {
     this.forYou = false,
     this.capsuleUnlockAt,
     this.circleId,
+    this.isRelay = false,
+    this.angle,
   });
 
   final String id;
-  final DropType type;
-  final LatLng point;
+  DropType type;
+
+  /// Mutable: relays move when they're dropped somewhere new.
+  LatLng point;
   final DateTime createdAt;
   final String? teaser;
   final String? body;
-  final String? mediaUrl;
+  String? mediaUrl;
   final Uint8List? localImage;
   final String? author;
   final bool mine;
@@ -555,10 +749,12 @@ class _DemoDrop {
   final bool forYou;
   final DateTime? capsuleUnlockAt;
   final String? circleId;
+  bool isRelay;
+  CaptureAngle? angle;
   int unlockCount;
   bool pending;
 
-  NearbyDrop toNearby(bool unlocked, {TrailRef? trail, CircleRef? circle}) {
+  NearbyDrop toNearby(bool unlocked, {TrailRef? trail, CircleRef? circle, int relayHops = 0}) {
     final fuzz = fuzzyCircle(id, point);
     return NearbyDrop(
       id: id,
@@ -586,10 +782,12 @@ class _DemoDrop {
       forYou: forYou,
       trail: trail,
       circle: circle,
+      isRelay: isRelay,
+      relayHops: relayHops,
     );
   }
 
-  DropContent toContent(DateTime? unlockedAt, {TrailRef? trail, CircleRef? circle}) => DropContent(
+  DropContent toContent(DateTime? unlockedAt, {TrailRef? trail, CircleRef? circle, RelayInfo? relay}) => DropContent(
         id: id,
         type: type,
         body: body,
@@ -604,6 +802,8 @@ class _DemoDrop {
         pending: pending,
         trail: trail,
         circle: circle,
+        relay: relay,
+        angle: angle,
       );
 
   PassportEntry toPassport({DateTime? unlockedAt}) => PassportEntry(

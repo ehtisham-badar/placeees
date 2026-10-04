@@ -9,7 +9,11 @@ import '../../core/theme/theme.dart';
 import '../../core/theme/tokens.dart';
 import '../../ui/buttons.dart';
 import '../../ui/drop_glyph.dart';
+import '../../core/events.dart';
+import '../../ui/trace_image.dart';
 import '../echoes/echoes_section.dart';
+import '../relays/relay_panel.dart';
+import '../thennow/then_now_section.dart';
 import '../trails/trail_banner.dart';
 
 /// The opened drop. Reopenable from anywhere once unlocked. Pops `true` if the map should refresh.
@@ -41,7 +45,7 @@ class _DropDetailPageState extends State<DropDetailPage> {
 
   Future<void> _load() async {
     try {
-      final c = await context.read<TraceApi>().drop(widget.dropId!);
+      final c = await context.read<TraceApi>().drop(widget.dropId ?? _content!.id);
       if (mounted) setState(() => _content = c);
     } on ApiError catch (e) {
       if (mounted) setState(() => _error = e);
@@ -95,6 +99,7 @@ class _DropDetailPageState extends State<DropDetailPage> {
       try {
         await api.blockAuthor(c.id);
         messenger.showSnackBar(const SnackBar(content: Text("Blocked. You won't see their drops again.")));
+        if (mounted) context.read<DataEvents>().changed();
         nav.pop(true);
       } on ApiError catch (e) {
         messenger.showSnackBar(SnackBar(content: Text(e.message)));
@@ -122,7 +127,14 @@ class _DropDetailPageState extends State<DropDetailPage> {
             ),
             Expanded(
               child: c != null
-                  ? _Body(content: c, justUnlocked: widget.justUnlocked)
+                  ? _Body(
+                      content: c,
+                      justUnlocked: widget.justUnlocked,
+                      onChanged: () {
+                        context.read<DataEvents>().changed();
+                        _load();
+                      },
+                    )
                   : Center(
                       child: _error == null
                           ? const CircularProgressIndicator(color: TraceColors.ember)
@@ -140,10 +152,11 @@ class _DropDetailPageState extends State<DropDetailPage> {
 }
 
 class _Body extends StatelessWidget {
-  const _Body({required this.content, required this.justUnlocked});
+  const _Body({required this.content, required this.justUnlocked, required this.onChanged});
 
   final DropContent content;
   final bool justUnlocked;
+  final VoidCallback onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -169,9 +182,17 @@ class _Body extends StatelessWidget {
           Text(c.teaser!, style: serif(size: 30, weight: FontWeight.w500, height: 1.12)),
         ],
         const SizedBox(height: Space.lg),
-        if (c.type == DropType.photo) _Photo(content: c),
-        if (c.type == DropType.photo && c.body != null) const SizedBox(height: Space.lg),
+        if (c.type == DropType.photo || c.type == DropType.thenNow) _Photo(content: c),
+        if ((c.type == DropType.photo || c.type == DropType.thenNow) && c.body != null) const SizedBox(height: Space.lg),
         if (c.body != null) _Note(text: c.body!, framed: c.type == DropType.text),
+        if (c.type == DropType.thenNow && !c.pending) ...[
+          const SizedBox(height: Space.md),
+          ThenNowSection(drop: c),
+        ],
+        if (c.relay != null && !c.pending) ...[
+          const SizedBox(height: Space.xl),
+          RelayPanel(dropId: c.id, relay: c.relay!, onPickedUp: onChanged),
+        ],
         const SizedBox(height: Space.lg),
         Align(
           alignment: Alignment.centerRight,
@@ -202,29 +223,23 @@ class _Photo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final placeholder = Container(
-      color: TraceColors.surfaceHigh,
-      alignment: Alignment.center,
-      child: const Icon(Icons.photo_rounded, color: TraceColors.textFaint, size: 40),
-    );
-    final Widget image = content.localImage != null
-        ? Image.memory(content.localImage!, fit: BoxFit.cover)
-        : content.mediaUrl != null
-            ? Image.network(
-                content.mediaUrl!,
-                fit: BoxFit.cover,
-                frameBuilder: (_, child, frame, sync) => sync
-                    ? child
-                    : AnimatedOpacity(opacity: frame == null ? 0 : 1, duration: Motion.slow, child: child),
-                loadingBuilder: (_, child, progress) =>
-                    progress == null ? child : Stack(fit: StackFit.expand, children: [placeholder, child]),
-                errorBuilder: (_, _, _) => placeholder,
-              )
-            : placeholder;
-
     return ClipRRect(
       borderRadius: BorderRadius.circular(Radii.lg),
-      child: AspectRatio(aspectRatio: 3 / 4, child: image),
+      child: AspectRatio(
+        aspectRatio: 3 / 4,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            TraceImage(url: content.mediaUrl, bytes: content.localImage),
+            if (content.type == DropType.thenNow)
+              const Positioned(
+                left: 12,
+                top: 12,
+                child: TagChip(label: 'THEN', icon: Icons.history_rounded, color: TraceColors.sun),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

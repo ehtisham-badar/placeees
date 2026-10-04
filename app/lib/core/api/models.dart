@@ -3,14 +3,21 @@ import 'dart:typed_data';
 import 'package:latlong2/latlong.dart';
 
 import 'conditions.dart';
+import 'signature.dart';
 import 'social.dart';
 
 enum DropType {
-  text,
-  photo,
-  voice;
+  text('text'),
+  photo('photo'),
+  voice('voice'),
+  thenNow('then_now');
 
-  static DropType parse(String s) => DropType.values.firstWhere((t) => t.name == s, orElse: () => DropType.text);
+  const DropType(this.wire);
+
+  /// The API's name for this type.
+  final String wire;
+
+  static DropType parse(String s) => DropType.values.firstWhere((t) => t.wire == s, orElse: () => DropType.text);
 }
 
 class User {
@@ -65,6 +72,7 @@ class NearbyDrop {
     this.isRelay = false,
     this.trail,
     this.circle,
+    this.relayHops = 0,
   });
 
   final String id;
@@ -90,6 +98,7 @@ class NearbyDrop {
   final bool isRelay;
   final TrailRef? trail;
   final CircleRef? circle;
+  final int relayHops;
 
   bool get canOpenAnywhere => mine || unlocked;
   bool get isSealed => capsuleUnlockAt != null && DateTime.now().isBefore(capsuleUnlockAt!);
@@ -112,6 +121,7 @@ class NearbyDrop {
         isRelay: isRelay,
         trail: trail,
         circle: circle,
+        relayHops: relayHops,
       );
 
   factory NearbyDrop.fromJson(Map<String, dynamic> j) {
@@ -140,6 +150,7 @@ class NearbyDrop {
       isRelay: badges['relay'] as bool? ?? false,
       trail: TrailRef.fromJson(badges['trail']),
       circle: CircleRef.fromJson(badges['circle']),
+      relayHops: (badges['relayHops'] as num?)?.toInt() ?? 0,
     );
   }
 }
@@ -161,6 +172,8 @@ class DropContent {
     this.localImage,
     this.trail,
     this.circle,
+    this.relay,
+    this.angle,
   });
 
   final String id;
@@ -173,6 +186,10 @@ class DropContent {
   final Uint8List? localImage;
   final TrailRef? trail;
   final CircleRef? circle;
+  final RelayInfo? relay;
+
+  /// Then/Now drops only.
+  final CaptureAngle? angle;
 
   /// Null for anonymous drops.
   final String? authorHandle;
@@ -196,6 +213,8 @@ class DropContent {
         pending: j['status'] == 'pending_moderation',
         trail: TrailRef.fromJson(j['trail']),
         circle: CircleRef.fromJson(j['circle']),
+        relay: RelayInfo.fromJson(j['relay']),
+        angle: CaptureAngle.fromJson(j['thenNow']),
       );
 }
 

@@ -8,7 +8,7 @@ import { CONTENT_TYPES, presignUpload, type MediaContentType } from '../media/r2
 import { createDrop, getDropContent, nearHint, nearbyDrops, unlockDrop } from './service.js';
 
 const CreateDrop = z.object({
-  type: z.enum(['text', 'photo', 'voice']),
+  type: z.enum(['text', 'photo', 'voice', 'then_now']),
   body: z.string().max(500).optional(),
   mediaKey: z.string().max(200).optional(),
   teaser: z.string().max(60).optional(),
@@ -19,6 +19,10 @@ const CreateDrop = z.object({
   unlockAt: z.iso.datetime({ offset: true }).transform((s) => new Date(s)).optional(),
   recipientHandles: z.array(z.string().max(21)).max(20).optional(),
   circleId: z.uuid().optional(),
+  isRelay: z.boolean().default(false),
+  /** Then/Now (F-14): where the historical photo's camera pointed. */
+  captureHeading: z.number().min(0).max(360).optional(),
+  capturePitch: z.number().min(-90).max(90).optional(),
 });
 
 const Nearby = z.object({

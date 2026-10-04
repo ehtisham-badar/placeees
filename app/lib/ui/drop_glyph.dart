@@ -7,12 +7,14 @@ IconData dropIcon(DropType t) => switch (t) {
       DropType.text => Icons.edit_note_rounded,
       DropType.photo => Icons.photo_camera_rounded,
       DropType.voice => Icons.graphic_eq_rounded,
+      DropType.thenNow => Icons.history_rounded,
     };
 
 String dropNoun(DropType t) => switch (t) {
       DropType.text => 'Note',
       DropType.photo => 'Photo',
       DropType.voice => 'Voice',
+      DropType.thenNow => 'Then/Now',
     };
 
 /// Type icon in a tinted disc.

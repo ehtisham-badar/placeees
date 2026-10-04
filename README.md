@@ -20,7 +20,8 @@ flutter run
 
 Without `TRACE_API_URL` the app runs against an in-memory demo backend that seeds hand-written
 drops around your location. Tap a glow, then **Demo: walk there** to feel the unlock. The demo also seeds a three-stop trail,
-a circle you're in, and one you can join with the code `WANDER29`.
+a circle you're in, one you can join with the code `WANDER29`, a relay that has already
+travelled across the city, and a Then/Now spot from 1965.
 Add `--dart-define=DEMO_AUTOSTART=true` to skip sign-in and onboarding.
 
 ## Run against the API
@@ -84,5 +85,9 @@ device push tokens in the app (needs Firebase/APNs credentials).
 stamps (F-10); echoes that can only be left in person (F-11); circles with invite codes and
 members-only drops (F-12).
 
-**Next — Phase 4 (signature features):** relay drops with journey view (F-13), Then/Now overlay
-camera (F-14).
+**Phase 4 — signature features (done):** relay drops you pick up, carry ≥ 1 km within 7 days and
+drop again, with a journey map and auto-return (F-13); Then/Now drops with a saved camera angle,
+a ghost-overlay alignment camera and a "now" timeline (F-14).
+
+**Next — Phase 5 (surfaces & hardening):** widgets and region notifications (F-15), App Clip /
+Android instant link (F-16), App Attest + Play Integrity, rate limits (F-17).

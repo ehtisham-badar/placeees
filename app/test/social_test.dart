@@ -27,7 +27,7 @@ void main() {
       expect(stop1.trail!.total, 3);
       expect(drops.where((d) => d.trail != null).length, 1, reason: 'only stop 1 is on the map');
 
-      expect(() => api.unlock('trail-b', fixAt(api.truePointOf('trail-b')!)), failsWith('trail_order'));
+      await expectLater(api.unlock('trail-b', fixAt(api.truePointOf('trail-b')!)), failsWith('trail_order'));
 
       final opened = await api.unlock(stop1.id, fixAt(api.truePointOf(stop1.id)!));
       expect(opened.trail!.nextClue, contains('oldest door'));
@@ -56,7 +56,7 @@ void main() {
 
     test('a trail needs at least three of your own drops', () async {
       final (api, _) = await seeded();
-      expect(() => api.createTrail('Mine', [(dropId: 'seed-0', clue: null)]), failsWith('invalid_stops'));
+      await expectLater(api.createTrail('Mine', [(dropId: 'seed-0', clue: null)]), failsWith('invalid_stops'));
       final ids = <String>[];
       for (var i = 0; i < 3; i++) {
         ids.add(await api.createDrop(type: DropType.text, fix: fixAt(offsetBy(here, i * 120.0, 300)), body: 'stop $i'));
@@ -76,7 +76,7 @@ void main() {
 
     test('join with a code, however it is typed', () async {
       final (api, _) = await seeded();
-      expect(() => api.joinCircle('NOPE1234'), failsWith('invalid_code'));
+      await expectLater(api.joinCircle('NOPE1234'), failsWith('invalid_code'));
       final c = await api.joinCircle(' wander-29 ');
       expect(c.name, 'Saturday walkers');
       expect((await api.circles()).map((c) => c.id), contains('circle-walkers'));
@@ -87,21 +87,19 @@ void main() {
       final mine = await api.createCircle('Book club');
       expect(mine.isOwner, isTrue);
       expect(mine.inviteCode, matches(RegExp(r'^[2-9A-HJKMNP-Z]{8}$')));
-      expect(() => api.leaveCircle(mine.id), failsWith('owner_cannot_leave'));
+      await expectLater(api.leaveCircle(mine.id), failsWith('owner_cannot_leave'));
     });
 
     test('circle and recipients are exclusive', () async {
       final (api, _) = await seeded();
-      expect(
-        () => api.createDrop(
+      await expectLater(api.createDrop(
           type: DropType.text,
           fix: fixAt(here),
           body: 'x',
           circleId: 'circle-hostel',
           recipientHandles: const ['noor'],
           unlockAt: DateTime.now().add(const Duration(days: 2)),
-        ),
-        failsWith('visibility_conflict'),
+        ), failsWith('visibility_conflict'),
       );
     });
   });
@@ -110,12 +108,12 @@ void main() {
     test('need an unlock and being there', () async {
       final (api, _) = await seeded();
       final truth = api.truePointOf('seed-0')!;
-      expect(() => api.echoes('seed-0'), failsWith('locked'));
+      await expectLater(api.echoes('seed-0'), failsWith('locked'));
 
       await api.unlock('seed-0', fixAt(truth));
       expect((await api.echoes('seed-0')).length, 3);
 
-      expect(() => api.postEcho('seed-0', 'hello', fixAt(offsetBy(truth, 0, 500))), failsWith('too_far'));
+      await expectLater(api.postEcho('seed-0', 'hello', fixAt(offsetBy(truth, 0, 500))), failsWith('too_far'));
       final echo = await api.postEcho('seed-0', 'hello from here', fixAt(truth));
       expect(echo.pending, isTrue);
       expect((await api.echoes('seed-0')).last.body, 'hello from here');

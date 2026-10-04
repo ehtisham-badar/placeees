@@ -8,6 +8,7 @@ import 'core/api/live_api.dart';
 import 'core/api/trace_api.dart';
 import 'core/auth/session.dart';
 import 'core/config.dart';
+import 'core/events.dart';
 import 'core/location/location_service.dart';
 
 void main() {
@@ -26,6 +27,7 @@ void main() {
         Provider<TraceApi>.value(value: api),
         ChangeNotifierProvider(create: (_) => Session(api)..restore()),
         ChangeNotifierProvider(create: (_) => LocationService()),
+        ChangeNotifierProvider(create: (_) => DataEvents()),
       ],
       child: const TraceApp(),
     ),

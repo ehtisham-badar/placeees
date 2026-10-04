@@ -6,7 +6,9 @@ import { dropRoutes } from './drops/routes.js';
 import { echoRoutes } from './echoes/routes.js';
 import { AppError } from './lib/errors.js';
 import { deviceRoutes } from './push/routes.js';
+import { relayRoutes } from './relays/routes.js';
 import { safetyRoutes } from './safety/routes.js';
+import { thenNowRoutes } from './thennow/routes.js';
 import { trailRoutes } from './trails/routes.js';
 import { userRoutes } from './users/routes.js';
 
@@ -29,5 +31,7 @@ export function buildApp() {
   app.register(trailRoutes);
   app.register(echoRoutes);
   app.register(circleRoutes);
+  app.register(relayRoutes);
+  app.register(thenNowRoutes);
   return app;
 }

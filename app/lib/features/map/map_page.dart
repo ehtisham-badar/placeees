@@ -7,6 +7,8 @@ import '../../core/api/models.dart';
 import '../../core/api/trace_api.dart';
 import '../../core/auth/session.dart';
 import '../../core/config.dart';
+import '../../core/api/signature.dart';
+import '../../core/events.dart';
 import '../../core/location/location_service.dart';
 import '../../core/theme/tokens.dart';
 import '../../ui/buttons.dart';
@@ -15,11 +17,13 @@ import '../../ui/pulse_rings.dart';
 import '../compass/compass_page.dart';
 import '../create/composer_page.dart';
 import '../passport/passport_page.dart';
+import '../relays/carrying_page.dart';
 import '../unlock/drop_detail_page.dart';
 import '../unlock/unlock_page.dart';
 import 'drop_card.dart';
 import 'drop_marker.dart';
 import 'map_model.dart';
+import 'night_tiles.dart';
 
 class MapPage extends StatelessWidget {
   const MapPage({super.key});
@@ -43,21 +47,41 @@ class _MapView extends StatefulWidget {
 class _MapViewState extends State<_MapView> {
   final _map = MapController();
   late final LocationService _location = context.read<LocationService>();
+  late final DataEvents _events = context.read<DataEvents>();
   bool _mapReady = false;
   bool _centeredOnce = false;
+  List<CarriedRelay> _carrying = const [];
 
   @override
   void initState() {
     super.initState();
     _location.addListener(_onLocation);
+    _events.addListener(_onDataChanged);
     _location.start();
+    _loadCarrying();
     WidgetsBinding.instance.addPostFrameCallback((_) => _onLocation());
   }
 
   @override
   void dispose() {
     _location.removeListener(_onLocation);
+    _events.removeListener(_onDataChanged);
     super.dispose();
+  }
+
+  void _onDataChanged() {
+    _refresh();
+    _loadCarrying();
+  }
+
+  Future<void> _loadCarrying() async {
+    final list = await context.read<TraceApi>().carrying().catchError((_) => <CarriedRelay>[]);
+    if (mounted) setState(() => _carrying = list);
+  }
+
+  Future<void> _openCarrying() async {
+    final dropped = await Navigator.of(context).push<bool>(MaterialPageRoute(builder: (_) => const CarryingPage()));
+    if (dropped == true) _onDataChanged();
   }
 
   void _onLocation() {
@@ -151,7 +175,7 @@ class _MapViewState extends State<_MapView> {
               onTap: (_, _) => model.select(null),
             ),
             children: [
-              const _Tiles(),
+              const NightTiles(),
               CircleLayer(
                 circles: [
                   for (final d in model.drops)
@@ -201,6 +225,13 @@ class _MapViewState extends State<_MapView> {
                 children: [
                   const SizedBox(height: Space.sm),
                   _TopBar(onPassport: _passport, onRefresh: _refresh),
+                  if (_carrying.isNotEmpty) ...[
+                    const SizedBox(height: Space.sm),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Pressable(onTap: _openCarrying, child: _CarryingPill(relays: _carrying)),
+                    ),
+                  ],
                   const Spacer(),
                   if (fix == null) const _LocatingHint(),
                   AnimatedSwitcher(
@@ -243,6 +274,35 @@ class _MapViewState extends State<_MapView> {
               child: Text(AppConfig.mapTileUrl.isEmpty ? '© OpenStreetMap contributors' : '© OpenStreetMap', style: TextStyle(fontSize: 9, color: TraceColors.textFaint)),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CarryingPill extends StatelessWidget {
+  const _CarryingPill({required this.relays});
+
+  final List<CarriedRelay> relays;
+
+  @override
+  Widget build(BuildContext context) {
+    final soonest = relays.map((r) => r.deadlineAt).reduce((a, b) => a.isBefore(b) ? a : b);
+    final days = soonest.difference(DateTime.now()).inDays;
+    return Glass(
+      radius: 100,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.back_hand_rounded, size: 15, color: TraceColors.sun),
+          const SizedBox(width: 8),
+          Text(
+            'Carrying ${relays.length} ${relays.length == 1 ? 'relay' : 'relays'} · ${days < 1 ? 'due today' : '$days d left'}',
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+          ),
+          const SizedBox(width: 4),
+          const Icon(Icons.chevron_right_rounded, size: 18, color: TraceColors.textMuted),
         ],
       ),
     );
@@ -444,30 +504,5 @@ class _LocatingHint extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-/// Base map. A configured dark style is used as-is; otherwise OSM tiles are recoloured to night.
-class _Tiles extends StatelessWidget {
-  const _Tiles();
-
-  // Inverted luminance with a navy tint: land goes deep blue-black, labels go light.
-  static const _night = ColorFilter.matrix([
-    -0.2126 * 1.05, -0.7152 * 1.05, -0.0722 * 1.05, 0, 255 * 1.05 + 4, //
-    -0.2126 * 1.08, -0.7152 * 1.08, -0.0722 * 1.08, 0, 255 * 1.08 + 8,
-    -0.2126 * 1.22, -0.7152 * 1.22, -0.0722 * 1.22, 0, 255 * 1.22 + 16,
-    0, 0, 0, 1, 0,
-  ]);
-
-  @override
-  Widget build(BuildContext context) {
-    final custom = AppConfig.mapTileUrl.isNotEmpty;
-    final layer = TileLayer(
-      urlTemplate: custom ? AppConfig.mapTileUrl : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-      userAgentPackageName: 'app.trace.mobile',
-      tileDisplay: const TileDisplay.fadeIn(),
-    );
-    if (custom) return layer;
-    return ColorFiltered(colorFilter: _night, child: Opacity(opacity: 0.8, child: layer));
   }
 }

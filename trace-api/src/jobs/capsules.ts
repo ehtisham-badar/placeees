@@ -26,10 +26,3 @@ export async function notifyOpenedCapsules(): Promise<number> {
   }
   return due.length;
 }
-
-export function startCapsuleJob(log: { error: (o: unknown, m: string) => void }, everyMs = 60_000) {
-  const tick = () => notifyOpenedCapsules().catch((err) => log.error(err, 'capsule job failed'));
-  const timer = setInterval(tick, everyMs);
-  timer.unref();
-  return () => clearInterval(timer);
-}

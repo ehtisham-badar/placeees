@@ -94,6 +94,14 @@ class DropCard extends StatelessWidget {
                     color: TraceColors.sun,
                   ),
                 ),
+              if (drop.isRelay)
+                TagChip(
+                  label: drop.relayHops == 0 ? 'Relay · ready to travel' : 'Relay · ${drop.relayHops} hops',
+                  icon: Icons.sync_alt_rounded,
+                  color: TraceColors.ember,
+                ),
+              if (drop.type == DropType.thenNow)
+                const TagChip(label: 'Then/Now', icon: Icons.history_rounded, color: TraceColors.sun),
               if (drop.circle != null) TagChip(label: drop.circle!.name, icon: Icons.group_rounded, color: TraceColors.iris),
               if (drop.capsuleUnlockAt != null)
                 TagChip(label: countdown(drop.capsuleUnlockAt!), icon: Icons.hourglass_top_rounded, color: TraceColors.sun),

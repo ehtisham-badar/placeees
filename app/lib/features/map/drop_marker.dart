@@ -53,7 +53,9 @@ class _DropMarkerState extends State<DropMarker> with SingleTickerProviderStateM
             ? conditionIcon(d.conditionKinds.firstOrNull)
             : d.pending
                 ? Icons.schedule_rounded
-                : d.trail != null
+                : d.isRelay
+                    ? Icons.sync_alt_rounded
+                    : d.trail != null
                     ? Icons.route_rounded
                     : d.circle != null
                         ? Icons.group_rounded
