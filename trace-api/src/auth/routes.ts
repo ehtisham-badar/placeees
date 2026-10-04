@@ -1,0 +1,39 @@
+import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
+import { config } from '../config.js';
+import { sql } from '../db/client.js';
+import { AppError } from '../lib/errors.js';
+import { serializeUser, type UserRow } from '../users/serialize.js';
+import { issueToken } from './jwt.js';
+import { verifyAppleIdentity, verifyGoogleIdentity } from './providers.js';
+
+type Provider = 'apple_sub' | 'google_sub' | 'dev_sub';
+
+async function signIn(provider: Provider, sub: string) {
+  const [user] = await sql<UserRow[]>`
+    INSERT INTO users ${sql({ [provider]: sub })}
+    ON CONFLICT (${sql(provider)}) DO UPDATE SET ${sql(provider)} = EXCLUDED.${sql(provider)}
+    RETURNING *`;
+  if (!user) throw new AppError('sign_in_failed', 500);
+  if (user.bannedAt) throw new AppError('banned', 403);
+  return { token: await issueToken(user.id), user: serializeUser(user) };
+}
+
+export async function authRoutes(app: FastifyInstance) {
+  app.post('/v1/auth/apple', async (req) => {
+    const { identityToken } = z.object({ identityToken: z.string().min(1) }).parse(req.body);
+    return signIn('apple_sub', await verifyAppleIdentity(identityToken));
+  });
+
+  app.post('/v1/auth/google', async (req) => {
+    const { idToken } = z.object({ idToken: z.string().min(1) }).parse(req.body);
+    return signIn('google_sub', await verifyGoogleIdentity(idToken));
+  });
+
+  if (config.ALLOW_DEV_LOGIN) {
+    app.post('/v1/auth/dev', async (req) => {
+      const { name } = z.object({ name: z.string().min(1).max(40) }).parse(req.body);
+      return signIn('dev_sub', name);
+    });
+  }
+}
