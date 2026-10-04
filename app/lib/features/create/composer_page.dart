@@ -1,6 +1,8 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
@@ -14,6 +16,7 @@ import '../../ui/buttons.dart';
 import '../../ui/drop_glyph.dart';
 import '../../ui/pulse_rings.dart';
 import 'image_compress.dart';
+import 'rules_section.dart';
 
 const _maxCreateAccuracy = 65.0;
 
@@ -33,10 +36,15 @@ class _ComposerPageState extends State<ComposerPage> {
   bool _anonymous = false;
   bool _posting = false;
   bool _done = false;
+  final _rules = DropRules();
+  String _tz = 'UTC';
 
   @override
   void initState() {
     super.initState();
+    FlutterTimezone.getLocalTimezone().then((tz) {
+      if (mounted) setState(() => _tz = tz.identifier);
+    }).catchError((_) {});
     _body.addListener(_rebuild);
     _teaser.addListener(_rebuild);
   }
@@ -88,6 +96,10 @@ class _ComposerPageState extends State<ComposerPage> {
         photoJpeg: _type == DropType.photo ? _photo : null,
         teaser: _teaser.text.trim().isEmpty ? null : _teaser.text.trim(),
         isAnonymous: _anonymous,
+        conditions: _rules.conditions(_tz),
+        revealConditions: _rules.reveal,
+        unlockAt: _rules.capsuleAt,
+        recipientHandles: _rules.recipients,
       );
       HapticFeedback.heavyImpact();
       setState(() => _done = true);
@@ -111,7 +123,7 @@ class _ComposerPageState extends State<ComposerPage> {
       body: AnimatedSwitcher(
         duration: Motion.slow,
         child: _done
-            ? const _Dropped()
+            ? _Dropped(sealedUntil: _rules.capsuleAt)
             : SafeArea(
                 child: Column(
                   children: [
@@ -170,6 +182,10 @@ class _ComposerPageState extends State<ComposerPage> {
                             style: Theme.of(context).textTheme.bodySmall?.copyWith(color: TraceColors.textFaint),
                           ),
                           const SizedBox(height: Space.lg),
+                          WaitSection(rules: _rules, tz: _tz, onChanged: _rebuild),
+                          const SizedBox(height: Space.sm + 4),
+                          CapsuleSection(rules: _rules, onChanged: _rebuild),
+                          const SizedBox(height: Space.sm + 4),
                           _AnonymousToggle(value: _anonymous, onChanged: (v) => setState(() => _anonymous = v)),
                         ],
                       ),
@@ -436,7 +452,9 @@ class _Label extends StatelessWidget {
 }
 
 class _Dropped extends StatelessWidget {
-  const _Dropped();
+  const _Dropped({this.sealedUntil});
+
+  final DateTime? sealedUntil;
 
   @override
   Widget build(BuildContext context) {
@@ -455,10 +473,12 @@ class _Dropped extends StatelessWidget {
                 child: const PulseRings(size: 200, child: EmberDot(size: 24)),
               ),
               const SizedBox(height: Space.lg),
-              Text('Dropped.', style: serif(size: 34, weight: FontWeight.w500)),
+              Text(sealedUntil == null ? 'Dropped.' : 'Sealed.', style: serif(size: 34, weight: FontWeight.w500)),
               const SizedBox(height: Space.sm),
               Text(
-                'It will glow on the map for others once it passes a quick review.',
+                sealedUntil == null
+                    ? 'It will glow on the map for others once it passes a quick review.'
+                    : 'It stays closed until ${DateFormat.yMMMMd().format(sealedUntil!)}. We’ll let you know when it opens.',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: TraceColors.textMuted),
               ),

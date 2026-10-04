@@ -5,6 +5,15 @@ import '../../core/theme/tokens.dart';
 import '../../ui/drop_glyph.dart';
 import '../../ui/pulse_rings.dart';
 
+IconData conditionIcon(String? kind) => switch (kind) {
+      'night' => Icons.nightlight_round,
+      'sun' => Icons.wb_twilight_rounded,
+      'weather' => Icons.water_drop_rounded,
+      'timeRange' => Icons.schedule_rounded,
+      'dateRange' => Icons.event_rounded,
+      _ => Icons.auto_awesome_rounded,
+    };
+
 Color dropColor(NearbyDrop d) {
   if (d.pending) return TraceColors.textMuted;
   if (d.unlocked || d.mine) return TraceColors.mint;
@@ -37,10 +46,10 @@ class _DropMarkerState extends State<DropMarker> with SingleTickerProviderStateM
     final d = widget.drop;
     final color = dropColor(d);
     final locked = !d.unlocked && !d.mine;
-    final badge = d.capsuleUnlockAt != null
+    final badge = d.isSealed
         ? Icons.hourglass_top_rounded
-        : d.hasCondition
-            ? Icons.nightlight_round
+        : d.hasCondition && !d.canOpenAnywhere
+            ? conditionIcon(d.conditionKinds.firstOrNull)
             : d.pending
                 ? Icons.schedule_rounded
                 : null;

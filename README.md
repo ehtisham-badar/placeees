@@ -49,6 +49,8 @@ flutter run --dart-define=TRACE_API_URL=http://localhost:3000
 | api | `GOOGLE_CLIENT_IDS` | Accepted Google token audiences |
 | api | `R2_*` | Cloudflare R2 for photo uploads |
 | api | `OPENAI_API_KEY` | Text + image moderation (local word filter otherwise) |
+| api | `APNS_*`, `FCM_*` | Push for opened time capsules (skipped when unset) |
+| api | `RUN_JOBS` | Run the capsule notification job in this process (default `true`) |
 
 Google sign-in on iOS also needs the reversed client id added as a URL scheme in
 `ios/Runner/Info.plist`; Sign in with Apple needs a signing team with the capability enabled.
@@ -57,7 +59,11 @@ Google sign-in on iOS also needs the reversed client id added as a URL scheme in
 
 ```bash
 cd trace-api && npm test          # fuzzing, unlock rules, travel checks, geohash
-cd app && flutter test            # formatting, fuzzing parity, demo unlock flow
+cd app && flutter test            # formatting, fuzzing/sun parity, conditions, compass, demo flows
+
+# UI walkthrough with screenshots saved to app/build/screenshots/
+cd app && flutter drive --driver=test_driver/integration_test.dart \
+  --target=integration_test/screens_test.dart --dart-define=DEMO_AUTOSTART=true -d <device>
 ```
 
 ## Status
@@ -66,5 +72,11 @@ cd app && flutter test            # formatting, fuzzing parity, demo unlock flow
 quiet zone, night map with fuzzy markers, on-site photo/text drops, server-validated unlock,
 moderation + report/block, Passport.
 
-**Next — Phase 2 (magic layer):** hot/cold haptic compass (F-07), conditional drops (F-08),
-time capsules (F-09). See the milestones in `TRACE_MVP.md` §10.
+**Phase 2 — magic layer (done):** hot/cold haptic compass with a server near-hint inside 100 m
+(F-07), conditional drops on sun phase, weather, time window and date range (F-08), time capsules
+with recipients and an "opened" push job (F-09).
+
+Still open from phase 2: hunting with the screen locked (background location) and registering
+device push tokens in the app (needs Firebase/APNs credentials).
+
+**Next — Phase 3 (social layer):** trails (F-10), echoes (F-11), circles (F-12).

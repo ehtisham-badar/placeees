@@ -1,10 +1,13 @@
 import { sql } from '../db/client.js';
 import { AppError, notFound } from '../lib/errors.js';
-import { geohash } from '../lib/geo.js';
+import { distanceM, geohash } from '../lib/geo.js';
 import { checkFreshness, isImpossibleTravel, type LocationPayload } from '../integrity/location.js';
 import { previousFix, recordFix } from '../integrity/fixes.js';
 import { moderate } from '../moderation/moderate.js';
 import { ownsMediaKey, signedReadUrl } from '../media/r2.js';
+import { conditionsMet } from '../conditions/evaluate.js';
+import { conditionKinds, type Conditions } from '../conditions/schema.js';
+import { currentWeather } from '../conditions/weather.js';
 import { fuzzyCircle } from './fuzz.js';
 import { evaluateUnlock } from './unlock.js';
 
@@ -12,6 +15,11 @@ export const MAX_CREATE_ACCURACY_M = 65;
 export const MAX_DROPS_PER_DAY = 10;
 export const MAX_DROPS_PER_CELL_PER_DAY = 3;
 export const HOME_ZONE_RADIUS_M = 200;
+export const NEAR_HINT_RADIUS_M = 100;
+export const NEAR_HINT_TTL_MS = 5 * 60_000;
+export const CAPSULE_MIN_MS = 24 * 3600_000;
+export const CAPSULE_MAX_MS = 25 * 365.25 * 24 * 3600_000;
+export const MAX_RECIPIENTS = 20;
 
 export type DropType = 'photo' | 'text' | 'voice';
 
@@ -22,6 +30,10 @@ export interface CreateDropInput {
   teaser?: string;
   isAnonymous: boolean;
   location: LocationPayload;
+  conditions?: Conditions;
+  revealConditions: boolean;
+  unlockAt?: Date;
+  recipientHandles?: string[];
 }
 
 /** Drops this user may see: approved (or their own), not blocked either way, not being carried. */
@@ -69,21 +81,41 @@ export async function createDrop(userId: string, input: CreateDropInput) {
     if (!ownsMediaKey(userId, input.mediaKey)) throw forbiddenMedia();
   }
 
+  if (input.unlockAt) {
+    const ahead = input.unlockAt.getTime() - Date.now();
+    if (ahead < CAPSULE_MIN_MS) throw new AppError('capsule_too_soon', 422);
+    if (ahead > CAPSULE_MAX_MS) throw new AppError('capsule_too_far', 422);
+  }
+  const recipientIds = await resolveRecipients(userId, input.recipientHandles ?? []);
+
   const cell = geohash(p, 7);
   await assertCanPlaceAt(userId, p, cell);
   await recordFix(userId, p);
 
   const [drop] = await sql<{ id: string; status: string; createdAt: Date }[]>`
-    INSERT INTO drops (creator_id, geo, geohash7, type, body, media_key, teaser, is_anonymous)
+    INSERT INTO drops (creator_id, geo, geohash7, type, body, media_key, teaser, is_anonymous,
+                       conditions, conditions_revealed, unlock_at, visibility, recipient_ids)
     VALUES (${userId}, ST_MakePoint(${p.lng}, ${p.lat})::geography, ${cell}, ${input.type},
             ${input.body?.trim() || null}, ${input.mediaKey ?? null}, ${input.teaser?.trim() || null},
-            ${input.isAnonymous})
+            ${input.isAnonymous}, ${input.conditions ? sql.json(input.conditions) : null},
+            ${input.conditions ? input.revealConditions : false}, ${input.unlockAt ?? null},
+            ${recipientIds.length ? 'users' : 'public'}, ${recipientIds.length ? recipientIds : null})
     RETURNING id, status, created_at`;
   if (!drop) throw new AppError('internal', 500);
 
   // Screening runs after the response; the drop stays invisible to others until approved.
   void screenDrop(drop.id, input).catch((err) => console.error('moderation error', drop.id, err));
   return drop;
+}
+
+/** Capsule recipients are chosen by handle; every handle must exist. */
+async function resolveRecipients(userId: string, handles: string[]): Promise<string[]> {
+  const wanted = [...new Set(handles.map((h) => h.trim().toLowerCase().replace(/^@/, '')).filter(Boolean))];
+  if (wanted.length === 0) return [];
+  if (wanted.length > MAX_RECIPIENTS) throw new AppError('too_many_recipients', 422);
+  const rows = await sql<{ id: string; handle: string }[]>`SELECT id, handle FROM users WHERE handle IN ${sql(wanted)}`;
+  if (rows.length !== wanted.length) throw new AppError('unknown_recipient', 422);
+  return rows.map((r) => r.id).filter((id) => id !== userId);
 }
 
 function forbiddenMedia() {
@@ -107,20 +139,23 @@ interface NearbyRow {
   createdAt: Date;
   lat: number;
   lng: number;
-  hasConditions: boolean;
+  conditions: Conditions | null;
+  conditionsRevealed: boolean;
   unlockAt: Date | null;
   isRelay: boolean;
   status: string;
   mine: boolean;
   unlocked: boolean;
+  forMe: boolean;
 }
 
 export async function nearbyDrops(userId: string, lat: number, lng: number, radius: number) {
   const rows = await sql<NearbyRow[]>`
     SELECT d.id, d.type, d.teaser, d.created_at, d.status,
            ST_Y(d.geo::geometry) AS lat, ST_X(d.geo::geometry) AS lng,
-           d.conditions IS NOT NULL AS has_conditions, d.unlock_at, d.is_relay,
+           d.conditions, d.conditions_revealed, d.unlock_at, d.is_relay,
            d.creator_id = ${userId} AS mine,
+           ${userId} = ANY(COALESCE(d.recipient_ids, '{}')) AS for_me,
            EXISTS (SELECT 1 FROM unlocks u WHERE u.drop_id = d.id AND u.user_id = ${userId}) AS unlocked
     FROM drops d
     WHERE ${visibleTo(userId)}
@@ -137,7 +172,15 @@ export async function nearbyDrops(userId: string, lat: number, lng: number, radi
     teaser: r.teaser,
     createdAt: r.createdAt,
     ...fuzzyCircle(r.id, { lat: r.lat, lng: r.lng }),
-    badges: { condition: r.hasConditions, capsuleUnlockAt: r.unlockAt, relay: r.isRelay },
+    badges: {
+      condition: r.conditions != null,
+      conditionKinds: r.conditions ? conditionKinds(r.conditions) : [],
+      // The exact rule is only shown when the creator chose to reveal it (or to the creator).
+      conditions: r.conditions && (r.conditionsRevealed || r.mine) ? r.conditions : null,
+      capsuleUnlockAt: r.unlockAt,
+      forYou: r.forMe,
+      relay: r.isRelay,
+    },
     mine: r.mine,
     unlocked: r.unlocked,
     pending: r.status === 'pending_moderation',
@@ -197,20 +240,21 @@ export async function getDropContent(userId: string, dropId: string) {
 }
 
 export async function unlockDrop(userId: string, dropId: string, p: LocationPayload) {
-  const [drop] = await sql<{ visible: boolean; distanceM: number; hasConditions: boolean; unlockAt: Date | null }[]>`
-    SELECT (${visibleTo(userId)} AND d.status = 'approved') AS visible,
-           ST_Distance(d.geo, ST_MakePoint(${p.lng}, ${p.lat})::geography) AS distance_m,
-           d.conditions IS NOT NULL AS has_conditions, d.unlock_at
-    FROM drops d WHERE d.id = ${dropId} AND d.status <> 'removed'`;
-  if (!drop) throw notFound();
-
-  const failure = evaluateUnlock({
+  const drop = await locateDrop(userId, dropId, p);
+  const failure = await evaluateUnlock({
     payload: p,
     previousFix: await previousFix(userId),
     distanceM: drop.distanceM,
     visible: drop.visible,
-    hasConditions: drop.hasConditions,
     unlockAt: drop.unlockAt,
+    conditionsMet: async () =>
+      !drop.conditions ||
+      conditionsMet(drop.conditions, {
+        now: new Date(),
+        lat: drop.lat,
+        lng: drop.lng,
+        weather: () => currentWeather(drop.lat, drop.lng),
+      }),
   });
   if (failure) throw new AppError(failure, failure === 'not_visible' ? 404 : 422);
 
@@ -219,4 +263,44 @@ export async function unlockDrop(userId: string, dropId: string, p: LocationPayl
     INSERT INTO unlocks (user_id, drop_id, accuracy) VALUES (${userId}, ${dropId}, ${p.accuracy})
     ON CONFLICT DO NOTHING`;
   return getDropContent(userId, dropId);
+}
+
+interface LocatedDrop {
+  visible: boolean;
+  distanceM: number;
+  lat: number;
+  lng: number;
+  conditions: Conditions | null;
+  unlockAt: Date | null;
+}
+
+async function locateDrop(userId: string, dropId: string, p: LocationPayload): Promise<LocatedDrop> {
+  const [drop] = await sql<LocatedDrop[]>`
+    SELECT (${visibleTo(userId)} AND d.status = 'approved') AS visible,
+           ST_Distance(d.geo, ST_MakePoint(${p.lng}, ${p.lat})::geography) AS distance_m,
+           ST_Y(d.geo::geometry) AS lat, ST_X(d.geo::geometry) AS lng,
+           d.conditions, d.unlock_at
+    FROM drops d WHERE d.id = ${dropId} AND d.status <> 'removed'`;
+  if (!drop || !drop.visible) throw notFound();
+  return drop;
+}
+
+/**
+ * Hot/cold compass (F-07): within 100 m, reveal the true point for a few minutes so the
+ * final approach can home in on it. Same integrity checks as an unlock.
+ */
+export async function nearHint(userId: string, dropId: string, p: LocationPayload) {
+  const stale = checkFreshness(p);
+  if (stale) throw new AppError(stale, 422);
+  if (p.accuracy > 80) throw new AppError('low_accuracy', 422);
+  if (isImpossibleTravel(await previousFix(userId), p)) throw new AppError('suspicious', 422);
+
+  const drop = await locateDrop(userId, dropId, p);
+  if (drop.distanceM > NEAR_HINT_RADIUS_M) throw new AppError('too_far', 422);
+  await recordFix(userId, p);
+  return {
+    point: { lat: drop.lat, lng: drop.lng },
+    distanceM: Math.round(distanceM(p, drop)),
+    expiresAt: new Date(Date.now() + NEAR_HINT_TTL_MS),
+  };
 }

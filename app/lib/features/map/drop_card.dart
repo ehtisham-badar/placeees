@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/api/conditions.dart';
 import '../../core/api/demo_api.dart';
 import '../../core/api/geo.dart';
 import '../../core/api/models.dart';
@@ -13,16 +15,25 @@ import '../../core/theme/tokens.dart';
 import '../../ui/buttons.dart';
 import '../../ui/drop_glyph.dart';
 import '../../ui/glass.dart';
+import '../compass/hot_cold.dart';
 import 'drop_marker.dart';
 
 /// Bottom card for the selected drop: what it is, how far, and what you can do about it.
 class DropCard extends StatelessWidget {
-  const DropCard({super.key, required this.drop, required this.onClose, required this.onUnlock, required this.onOpen});
+  const DropCard({
+    super.key,
+    required this.drop,
+    required this.onClose,
+    required this.onUnlock,
+    required this.onOpen,
+    required this.onFind,
+  });
 
   final NearbyDrop drop;
   final VoidCallback onClose;
   final VoidCallback onUnlock;
   final VoidCallback onOpen;
+  final VoidCallback onFind;
 
   @override
   Widget build(BuildContext context) {
@@ -70,10 +81,17 @@ class DropCard extends StatelessWidget {
             children: [
               if (drop.pending) const TagChip(label: 'In review', icon: Icons.schedule_rounded, color: TraceColors.amber),
               if (drop.unlocked) const TagChip(label: 'In your passport', icon: Icons.verified_rounded, color: TraceColors.mint),
+              if (drop.forYou) const TagChip(label: 'For you', icon: Icons.favorite_rounded, color: TraceColors.rose),
               if (drop.capsuleUnlockAt != null)
                 TagChip(label: countdown(drop.capsuleUnlockAt!), icon: Icons.hourglass_top_rounded, color: TraceColors.sun),
               if (drop.hasCondition)
-                const TagChip(label: 'Waits for the right moment', icon: Icons.nightlight_round, color: TraceColors.sun),
+                TagChip(
+                  label: drop.conditions == null
+                      ? 'Waits for the right moment'
+                      : 'Opens ${describeConditions(drop.conditions!)}',
+                  icon: conditionIcon(drop.conditionKinds.firstOrNull),
+                  color: TraceColors.sun,
+                ),
               if (toCenter != null && !drop.canOpenAnywhere)
                 TagChip(
                   label: inside ? "You're in the glow" : '${distanceLabel(toCenter - drop.radius)} to the glow',
@@ -98,6 +116,9 @@ class DropCard extends StatelessWidget {
         onPressed: onOpen,
       );
     }
+    if (drop.isSealed) {
+      return PrimaryButton(label: 'Sealed until ${DateFormat.yMMMd().format(drop.capsuleUnlockAt!)}', icon: Icons.lock_clock_rounded);
+    }
     if (inside) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -108,17 +129,23 @@ class DropCard extends StatelessWidget {
           ),
           const SizedBox(height: Space.sm + 4),
           PrimaryButton(label: 'Try to unlock', icon: Icons.fingerprint_rounded, onPressed: onUnlock),
+          const SizedBox(height: Space.sm),
+          GhostButton(label: 'Find the exact spot', icon: Icons.explore_rounded, onPressed: onFind),
           ..._demoWalk(context),
         ],
       );
     }
+    final inRange = toCenter != null && toCenter - drop.radius <= compassMaxRange;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        PrimaryButton(
-          label: toCenter == null ? 'Waiting for location' : 'Get closer to unlock',
-          icon: Icons.lock_rounded,
-        ),
+        if (inRange)
+          PrimaryButton(label: 'Find it', icon: Icons.explore_rounded, onPressed: onFind)
+        else
+          PrimaryButton(
+            label: toCenter == null ? 'Waiting for location' : 'Get within ${distanceLabel(compassMaxRange)} to hunt',
+            icon: Icons.lock_rounded,
+          ),
         ..._demoWalk(context),
       ],
     );

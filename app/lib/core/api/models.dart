@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 import 'package:latlong2/latlong.dart';
 
+import 'conditions.dart';
+
 enum DropType {
   text,
   photo,
@@ -55,7 +57,10 @@ class NearbyDrop {
     required this.unlocked,
     required this.pending,
     this.hasCondition = false,
+    this.conditionKinds = const [],
+    this.conditions,
     this.capsuleUnlockAt,
+    this.forYou = false,
     this.isRelay = false,
   });
 
@@ -69,10 +74,38 @@ class NearbyDrop {
   final bool unlocked;
   final bool pending;
   final bool hasCondition;
+
+  /// Which kinds of rule apply (`sun`, `night`, `weather`, `timeRange`, `dateRange`): shown as icons.
+  final List<String> conditionKinds;
+
+  /// The exact rules, only when the creator chose to reveal them (or it's your own drop).
+  final List<DropCondition>? conditions;
   final DateTime? capsuleUnlockAt;
+
+  /// A time capsule addressed to you.
+  final bool forYou;
   final bool isRelay;
 
   bool get canOpenAnywhere => mine || unlocked;
+  bool get isSealed => capsuleUnlockAt != null && DateTime.now().isBefore(capsuleUnlockAt!);
+
+  NearbyDrop copyWith({bool? unlocked}) => NearbyDrop(
+        id: id,
+        type: type,
+        teaser: teaser,
+        createdAt: createdAt,
+        center: center,
+        radius: radius,
+        mine: mine,
+        unlocked: unlocked ?? this.unlocked,
+        pending: pending,
+        hasCondition: hasCondition,
+        conditionKinds: conditionKinds,
+        conditions: conditions,
+        capsuleUnlockAt: capsuleUnlockAt,
+        forYou: forYou,
+        isRelay: isRelay,
+      );
 
   factory NearbyDrop.fromJson(Map<String, dynamic> j) {
     final c = j['center'] as Map<String, dynamic>;
@@ -88,7 +121,15 @@ class NearbyDrop {
       unlocked: j['unlocked'] as bool? ?? false,
       pending: j['pending'] as bool? ?? false,
       hasCondition: badges['condition'] as bool? ?? false,
+      conditionKinds: ((badges['conditionKinds'] as List?) ?? const []).cast<String>(),
+      conditions: (badges['conditions'] as Map<String, dynamic>?)?['all'] == null
+          ? null
+          : [
+              for (final c in (badges['conditions'] as Map<String, dynamic>)['all'] as List)
+                ?DropCondition.fromJson(c as Map<String, dynamic>),
+            ],
       capsuleUnlockAt: badges['capsuleUnlockAt'] == null ? null : DateTime.parse(badges['capsuleUnlockAt'] as String),
+      forYou: badges['forYou'] as bool? ?? false,
       isRelay: badges['relay'] as bool? ?? false,
     );
   }
@@ -196,4 +237,22 @@ class AuthResult {
 
   final String token;
   final User user;
+}
+
+/// The true point of a drop, revealed briefly once you're within 100 m (spec F-07).
+class NearHint {
+  const NearHint({required this.point, required this.expiresAt});
+
+  final LatLng point;
+  final DateTime expiresAt;
+
+  bool get isValid => DateTime.now().isBefore(expiresAt);
+
+  factory NearHint.fromJson(Map<String, dynamic> j) {
+    final p = j['point'] as Map<String, dynamic>;
+    return NearHint(
+      point: LatLng((p['lat'] as num).toDouble(), (p['lng'] as num).toDouble()),
+      expiresAt: DateTime.parse(j['expiresAt'] as String),
+    );
+  }
 }

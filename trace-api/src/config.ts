@@ -21,6 +21,19 @@ const Env = z.object({
   R2_SECRET_ACCESS_KEY: z.string().default(''),
   R2_BUCKET: z.string().default('trace-media'),
   OPENAI_API_KEY: z.string().default(''),
+  // APNs token auth (.p8 key contents; literal \n sequences are accepted)
+  APNS_KEY_ID: z.string().default(''),
+  APNS_TEAM_ID: z.string().default(''),
+  APNS_PRIVATE_KEY: z.string().default(''),
+  APNS_PRODUCTION: bool,
+  // Firebase Cloud Messaging HTTP v1 (service account)
+  FCM_PROJECT_ID: z.string().default(''),
+  FCM_CLIENT_EMAIL: z.string().default(''),
+  FCM_PRIVATE_KEY: z.string().default(''),
+  RUN_JOBS: z
+    .enum(['true', 'false', '1', '0'])
+    .default('true')
+    .transform((v) => v === 'true' || v === '1'),
 });
 
 export const config = Env.parse(process.env);

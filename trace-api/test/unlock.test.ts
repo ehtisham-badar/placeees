@@ -9,8 +9,8 @@ function input(overrides: Partial<UnlockInput> = {}, payload: Partial<UnlockInpu
     previousFix: null,
     distanceM: 20,
     visible: true,
-    hasConditions: false,
     unlockAt: null,
+    conditionsMet: async () => true,
     now: NOW,
     ...overrides,
   };
@@ -25,35 +25,48 @@ describe('unlockRadius', () => {
 });
 
 describe('evaluateUnlock', () => {
-  it('unlocks a nearby, visible drop', () => {
-    expect(evaluateUnlock(input())).toBeNull();
+  it('unlocks a nearby, visible drop', async () => {
+    expect(await evaluateUnlock(input())).toBeNull();
   });
 
-  it('rejects stale fixes', () => {
-    expect(evaluateUnlock(input({}, { timestamp: '2026-10-04T14:21:00Z' }))).toBe('stale');
+  it('rejects stale fixes', async () => {
+    expect(await evaluateUnlock(input({}, { timestamp: '2026-10-04T14:21:00Z' }))).toBe('stale');
   });
 
-  it('rejects low accuracy', () => {
-    expect(evaluateUnlock(input({}, { accuracy: 120 }))).toBe('low_accuracy');
+  it('rejects low accuracy', async () => {
+    expect(await evaluateUnlock(input({}, { accuracy: 120 }))).toBe('low_accuracy');
   });
 
-  it('rejects impossible travel', () => {
+  it('rejects impossible travel', async () => {
     const previousFix = { lat: 24.8607, lng: 67.0011, at: new Date('2026-10-04T14:00:00Z') }; // Karachi
-    expect(evaluateUnlock(input({ previousFix }))).toBe('suspicious');
+    expect(await evaluateUnlock(input({ previousFix }))).toBe('suspicious');
   });
 
-  it('rejects when outside the accuracy-scaled radius', () => {
-    expect(evaluateUnlock(input({ distanceM: 59 }))).toBe('too_far');
-    expect(evaluateUnlock(input({ distanceM: 57 }))).toBeNull();
+  it('rejects when outside the accuracy-scaled radius', async () => {
+    expect(await evaluateUnlock(input({ distanceM: 59 }))).toBe('too_far');
+    expect(await evaluateUnlock(input({ distanceM: 57 }))).toBeNull();
   });
 
-  it('rejects invisible drops after the distance check', () => {
-    expect(evaluateUnlock(input({ visible: false }))).toBe('not_visible');
+  it('rejects invisible drops after the distance check', async () => {
+    expect(await evaluateUnlock(input({ visible: false }))).toBe('not_visible');
   });
 
-  it('keeps conditional and capsule drops locked', () => {
-    expect(evaluateUnlock(input({ hasConditions: true }))).toBe('condition_locked');
-    expect(evaluateUnlock(input({ unlockAt: new Date(NOW + 60_000) }))).toBe('capsule_locked');
-    expect(evaluateUnlock(input({ unlockAt: new Date(NOW - 60_000) }))).toBeNull();
+  it('keeps conditional and capsule drops locked', async () => {
+    expect(await evaluateUnlock(input({ conditionsMet: async () => false }))).toBe('condition_locked');
+    expect(await evaluateUnlock(input({ unlockAt: new Date(NOW + 60_000) }))).toBe('capsule_locked');
+    expect(await evaluateUnlock(input({ unlockAt: new Date(NOW - 60_000) }))).toBeNull();
+  });
+});
+
+describe('evaluateUnlock ordering', () => {
+  it('never evaluates conditions for someone too far away or before a capsule opens', async () => {
+    let calls = 0;
+    const conditionsMet = async () => {
+      calls++;
+      return true;
+    };
+    await evaluateUnlock(input({ distanceM: 500, conditionsMet }));
+    await evaluateUnlock(input({ unlockAt: new Date(NOW + 60_000), conditionsMet }));
+    expect(calls).toBe(0);
   });
 });

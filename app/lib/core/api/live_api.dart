@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 import 'api_error.dart';
+import 'conditions.dart';
 import 'models.dart';
 import 'trace_api.dart';
 
@@ -95,6 +96,10 @@ class LiveApi implements TraceApi {
     Uint8List? photoJpeg,
     String? teaser,
     bool isAnonymous = false,
+    List<DropCondition> conditions = const [],
+    bool revealConditions = false,
+    DateTime? unlockAt,
+    List<String> recipientHandles = const [],
   }) async {
     String? mediaKey;
     if (photoJpeg != null) {
@@ -111,9 +116,20 @@ class LiveApi implements TraceApi {
       'teaser': ?(teaser == null || teaser.isEmpty ? null : teaser),
       'isAnonymous': isAnonymous,
       'location': fix.toJson(),
+      if (conditions.isNotEmpty) ...{
+        'conditions': {'all': [for (final c in conditions) c.toJson()]},
+        'revealConditions': revealConditions,
+      },
+      if (unlockAt != null) 'unlockAt': unlockAt.toUtc().toIso8601String(),
+      if (recipientHandles.isNotEmpty) 'recipientHandles': recipientHandles,
     }) as Map<String, dynamic>;
     return j['id'] as String;
   }
+
+  @override
+  Future<NearHint> nearHint(String dropId, LocationFix fix) async => NearHint.fromJson(
+        await _send('POST', '/v1/drops/$dropId/near-hint', body: {'location': fix.toJson()}) as Map<String, dynamic>,
+      );
 
   @override
   Future<Passport> passport() async {

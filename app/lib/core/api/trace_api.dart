@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'conditions.dart';
 import 'models.dart';
 
 /// Everything the app needs from the backend. Implemented by [LiveApi] and [DemoApi].
@@ -26,7 +27,14 @@ abstract class TraceApi {
     Uint8List? photoJpeg,
     String? teaser,
     bool isAnonymous = false,
+    List<DropCondition> conditions = const [],
+    bool revealConditions = false,
+    DateTime? unlockAt,
+    List<String> recipientHandles = const [],
   });
+
+  /// The true point of a drop once you're within 100 m of it (compass, F-07).
+  Future<NearHint> nearHint(String dropId, LocationFix fix);
 
   Future<Passport> passport();
 

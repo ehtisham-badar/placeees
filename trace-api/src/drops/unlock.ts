@@ -19,8 +19,9 @@ export interface UnlockInput {
   /** Distance from the payload to the drop's true point, computed by PostGIS. */
   distanceM: number;
   visible: boolean;
-  hasConditions: boolean;
   unlockAt: Date | null;
+  /** Evaluates the drop's conditions (F-08); only called once everything cheaper has passed. */
+  conditionsMet: () => Promise<boolean>;
   now?: number;
 }
 
@@ -30,7 +31,7 @@ export function unlockRadius(accuracy: number): number {
 }
 
 /** Server-side unlock validation (spec F-04). Order matters: integrity first, then place, then rules. */
-export function evaluateUnlock(input: UnlockInput): UnlockFailure | null {
+export async function evaluateUnlock(input: UnlockInput): Promise<UnlockFailure | null> {
   const now = input.now ?? Date.now();
   const { payload } = input;
 
@@ -41,8 +42,7 @@ export function evaluateUnlock(input: UnlockInput): UnlockFailure | null {
 
   if (input.distanceM > unlockRadius(payload.accuracy)) return 'too_far';
   if (!input.visible) return 'not_visible';
-  // Conditional drops (F-08) are evaluated in phase 2; until then they stay locked.
-  if (input.hasConditions) return 'condition_locked';
   if (input.unlockAt && now < input.unlockAt.getTime()) return 'capsule_locked';
+  if (!(await input.conditionsMet())) return 'condition_locked';
   return null;
 }

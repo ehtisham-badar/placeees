@@ -12,6 +12,7 @@ import '../../core/theme/tokens.dart';
 import '../../ui/buttons.dart';
 import '../../ui/glass.dart';
 import '../../ui/pulse_rings.dart';
+import '../compass/compass_page.dart';
 import '../create/composer_page.dart';
 import '../passport/passport_page.dart';
 import '../unlock/drop_detail_page.dart';
@@ -86,18 +87,24 @@ class _MapViewState extends State<_MapView> {
     _map.move(LatLng(d.center.latitude - 0.0012 * (16.2 / cam.zoom), d.center.longitude), cam.zoom);
   }
 
-  Future<void> _unlock(NearbyDrop d) async {
+  void _unlock(NearbyDrop d) {
     final model = context.read<MapModel>();
-    final unlocked = await Navigator.of(context).push<bool>(
+    Navigator.of(context).push(
       PageRouteBuilder(
         opaque: false,
         transitionDuration: Motion.slow,
         reverseTransitionDuration: Motion.medium,
-        pageBuilder: (_, _, _) => UnlockPage(drop: d),
+        pageBuilder: (_, _, _) => UnlockPage(drop: d, onUnlocked: model.markUnlocked),
         transitionsBuilder: (_, a, _, child) => FadeTransition(opacity: a, child: child),
       ),
     );
-    if (unlocked == true) model.markUnlocked(d.id);
+  }
+
+  void _find(NearbyDrop d) {
+    final model = context.read<MapModel>();
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => CompassPage(drop: d, onUnlocked: model.markUnlocked)),
+    );
   }
 
   Future<void> _open(NearbyDrop d) async {
@@ -214,6 +221,7 @@ class _MapViewState extends State<_MapView> {
                             onClose: () => model.select(null),
                             onUnlock: () => _unlock(selected),
                             onOpen: () => _open(selected),
+                            onFind: () => _find(selected),
                           )
                         : _Dock(
                             key: const ValueKey('dock'),

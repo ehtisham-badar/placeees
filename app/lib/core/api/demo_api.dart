@@ -5,8 +5,10 @@ import 'dart:typed_data';
 import 'package:latlong2/latlong.dart';
 
 import 'api_error.dart';
+import 'conditions.dart';
 import 'geo.dart';
 import 'models.dart';
+import 'sun.dart';
 import 'trace_api.dart';
 
 /// An in-memory backend that seeds hand-written drops around wherever you are.
@@ -74,10 +76,10 @@ class DemoApi implements TraceApi {
     final d = _drops[dropId] ?? (throw const ApiError('not_found'));
     if (fix.accuracy > 80) throw const ApiError('low_accuracy');
     if (metersBetween(fix.point, d.point) > unlockRadius(fix.accuracy)) throw const ApiError('too_far');
-    if (d.hasCondition) throw const ApiError('condition_locked');
     if (d.capsuleUnlockAt != null && DateTime.now().isBefore(d.capsuleUnlockAt!)) {
       throw const ApiError('capsule_locked');
     }
+    if (!_conditionsMet(d, DateTime.now())) throw const ApiError('condition_locked');
     if (!_unlockedAt.containsKey(d.id)) {
       _unlockedAt[d.id] = DateTime.now();
       d.unlockCount++;
@@ -101,9 +103,19 @@ class DemoApi implements TraceApi {
     Uint8List? photoJpeg,
     String? teaser,
     bool isAnonymous = false,
+    List<DropCondition> conditions = const [],
+    bool revealConditions = false,
+    DateTime? unlockAt,
+    List<String> recipientHandles = const [],
   }) async {
     await _latency(900);
     if (fix.accuracy > 65) throw const ApiError('low_accuracy');
+    if (unlockAt != null) {
+      final ahead = unlockAt.difference(DateTime.now());
+      if (ahead < const Duration(hours: 24)) throw const ApiError('capsule_too_soon');
+      if (ahead > const Duration(days: 25 * 365)) throw const ApiError('capsule_too_far');
+    }
+    if (recipientHandles.length > 20) throw const ApiError('too_many_recipients');
     final mineToday = _drops.values.where((d) => d.mine).length;
     if (mineToday >= 10) throw const ApiError('daily_limit');
 
@@ -118,11 +130,55 @@ class DemoApi implements TraceApi {
       createdAt: DateTime.now(),
       mine: true,
       pending: true,
+      conditions: conditions.isEmpty ? null : conditions,
+      revealed: revealConditions,
+      capsuleUnlockAt: unlockAt,
     );
     _drops[d.id] = d;
     // Simulated moderation pass.
     Timer(const Duration(seconds: 4), () => d.pending = false);
     return d.id;
+  }
+
+  @override
+  Future<NearHint> nearHint(String dropId, LocationFix fix) async {
+    await _latency(200);
+    final d = _drops[dropId] ?? (throw const ApiError('not_found'));
+    if (metersBetween(fix.point, d.point) > 100) throw const ApiError('too_far');
+    return NearHint(point: d.point, expiresAt: DateTime.now().add(const Duration(minutes: 5)));
+  }
+
+  /// Same rules as the API. Demo weather is always clear; times use the device clock.
+  bool _conditionsMet(_DemoDrop d, DateTime now) {
+    for (final c in d.conditions ?? const <DropCondition>[]) {
+      final ok = switch (c) {
+        SunCondition(:final phase, :final windowMinutes) => _inSunPhase(phase, now, d.point, windowMinutes),
+        WeatherCondition(:final kind) => kind == WeatherKind.clear,
+        TimeRangeCondition(:final from, :final to) => _inTimeRange(_hhmm(now), from, to),
+        DateRangeCondition(:final from, :final to) =>
+          !DateTime(now.year, now.month, now.day).isBefore(from) && !DateTime(now.year, now.month, now.day).isAfter(to),
+      };
+      if (!ok) return false;
+    }
+    return true;
+  }
+
+  static String _hhmm(DateTime t) => '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+  static bool _inTimeRange(String t, String from, String to) =>
+      from.compareTo(to) <= 0 ? t.compareTo(from) >= 0 && t.compareTo(to) < 0 : t.compareTo(from) >= 0 || t.compareTo(to) < 0;
+
+  static bool _inSunPhase(SunPhase phase, DateTime now, LatLng p, int windowMinutes) {
+    final days = [-1, 0, 1].map((o) => SunTimes.of(now.add(Duration(days: o)), p.latitude, p.longitude)).toList();
+    final w = Duration(minutes: windowMinutes);
+    bool near(DateTime? at) => at != null && now.difference(at).abs() <= w;
+    bool between(DateTime? a, DateTime? b) => a != null && b != null && !now.isBefore(a) && !now.isAfter(b);
+    return switch (phase) {
+      SunPhase.sunrise => days.any((s) => near(s.sunrise)),
+      SunPhase.sunset => days.any((s) => near(s.sunset)),
+      SunPhase.goldenHour => days.any((s) => between(s.sunrise, s.goldenHourEnd) || between(s.goldenHour, s.sunset)),
+      SunPhase.night => [0, 1].any((i) => between(days[i].dusk, days[i + 1].dawn)),
+    };
   }
 
   @override
@@ -158,7 +214,9 @@ class DemoApi implements TraceApi {
         author: s.author,
         createdAt: now.subtract(s.age),
         unlockCount: s.unlocks,
-        hasCondition: s.condition,
+        conditions: s.conditions,
+        revealed: s.revealed,
+        forYou: s.forYou,
         capsuleUnlockAt: s.capsuleIn == null ? null : now.add(s.capsuleIn!),
       );
       _drops[d.id] = d;
@@ -180,7 +238,9 @@ class _DemoDrop {
     this.unlockCount = 0,
     this.mine = false,
     this.pending = false,
-    this.hasCondition = false,
+    this.conditions,
+    this.revealed = false,
+    this.forYou = false,
     this.capsuleUnlockAt,
   });
 
@@ -194,7 +254,9 @@ class _DemoDrop {
   final Uint8List? localImage;
   final String? author;
   final bool mine;
-  final bool hasCondition;
+  final List<DropCondition>? conditions;
+  final bool revealed;
+  final bool forYou;
   final DateTime? capsuleUnlockAt;
   int unlockCount;
   bool pending;
@@ -211,8 +273,20 @@ class _DemoDrop {
       mine: mine,
       unlocked: unlocked,
       pending: pending,
-      hasCondition: hasCondition,
+      hasCondition: conditions != null,
+      conditionKinds: [
+        for (final c in conditions ?? const <DropCondition>[])
+          switch (c) {
+            SunCondition(phase: SunPhase.night) => 'night',
+            SunCondition() => 'sun',
+            WeatherCondition() => 'weather',
+            TimeRangeCondition() => 'timeRange',
+            DateRangeCondition() => 'dateRange',
+          },
+      ],
+      conditions: revealed || mine ? conditions : null,
       capsuleUnlockAt: capsuleUnlockAt,
+      forYou: forYou,
     );
   }
 
@@ -254,7 +328,9 @@ typedef _Seed = ({
   String? author,
   Duration age,
   int unlocks,
-  bool condition,
+  List<DropCondition>? conditions,
+  bool revealed,
+  bool forYou,
   Duration? capsuleIn,
 });
 
@@ -268,7 +344,9 @@ _Seed _s({
   String? author,
   Duration age = const Duration(days: 2),
   int unlocks = 0,
-  bool condition = false,
+  List<DropCondition>? conditions,
+  bool revealed = false,
+  bool forYou = false,
   Duration? capsuleIn,
 }) =>
     (
@@ -281,7 +359,9 @@ _Seed _s({
       author: author,
       age: age,
       unlocks: unlocks,
-      condition: condition,
+      conditions: conditions,
+      revealed: revealed,
+      forYou: forYou,
       capsuleIn: capsuleIn,
     );
 
@@ -356,8 +436,44 @@ final _seeds = <_Seed>[
     meters: 1100,
     teaser: 'Night sky from up here.',
     photo: 'trace-stars',
-    condition: true,
+    body: 'Lie on the grass. Give your eyes two minutes. Then count.',
+    conditions: const [SunCondition(SunPhase.night)],
+    revealed: true,
     age: const Duration(days: 4),
+    unlocks: 19,
+  ),
+  _s(
+    type: DropType.text,
+    bearing: 300,
+    meters: 34,
+    teaser: 'Only makes sense in the right light.',
+    body: 'See how the whole wall turns copper? That’s why I come back every evening.',
+    conditions: const [SunCondition(SunPhase.goldenHour)],
+    revealed: true,
+    author: 'mahnoor',
+    age: const Duration(days: 6),
+    unlocks: 7,
+  ),
+  _s(
+    type: DropType.text,
+    bearing: 95,
+    meters: 230,
+    teaser: 'Something only rain can open.',
+    body: 'Petrichor. That’s the word for this smell. Now you know.',
+    conditions: const [WeatherCondition(WeatherKind.rain)],
+    age: const Duration(days: 15),
+    unlocks: 3,
+  ),
+  _s(
+    type: DropType.text,
+    bearing: 140,
+    meters: 70,
+    teaser: 'For you, when it’s time.',
+    body: 'Told you I’d remember.',
+    author: 'sara',
+    forYou: true,
+    capsuleIn: const Duration(days: 3, hours: 4),
+    age: const Duration(days: 1),
   ),
   _s(
     type: DropType.text,

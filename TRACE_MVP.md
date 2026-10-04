@@ -541,9 +541,9 @@ trace-api/
 - [ ] Deploy API to Railway
 
 ### Week 4–5 — Magic layer
-- [ ] F-07 Haptic compass
-- [ ] F-08 Conditional drops (sun + time first, weather second)
-- [ ] F-09 Time capsules + scheduled push
+- [x] F-07 Haptic compass (foreground; locked-screen hunting pending)
+- [x] F-08 Conditional drops (sun, weather, time window, date range)
+- [x] F-09 Time capsules + scheduled push (server side; app push registration pending)
 
 ### Week 6–7 — Social layer
 - [ ] F-10 Trails + Live Activity
@@ -616,3 +616,8 @@ trace-api/
 | 2026-10-04 | `users.handle` nullable until onboarding completes | Handle is chosen after the first sign-in |
 | 2026-10-04 | Drops auto-hide after 3 distinct reports, pending review | Limits harm before a moderator looks |
 | 2026-10-04 | Conditional drops stay `condition_locked` until F-08 ships | No unlock path skips the rule engine |
+| 2026-10-04 | Capsule notifications run as an in-process minute job, not BullMQ/pg-boss | One atomic `UPDATE … RETURNING` claim is enough at pilot scale; no Redis needed yet |
+| 2026-10-04 | Conditions carry an IANA time zone (`tz`) on time and date rules | "20:00" must mean the creator's local evening |
+| 2026-10-04 | Unknown weather (provider down) never satisfies a weather rule | Fail closed: a drop never opens on a guess |
+| 2026-10-04 | Capsule checks run before condition checks on unlock | A sealed capsule never triggers a weather lookup |
+| 2026-10-04 | Compass haptics use platform impact levels (light/medium/heavy) | Flutter has no Core Haptics intensity curve; three levels read clearly |

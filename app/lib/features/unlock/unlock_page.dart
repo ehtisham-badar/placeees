@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/api/api_error.dart';
+import '../../core/api/conditions.dart';
 import '../../core/api/models.dart';
 import '../../core/api/trace_api.dart';
 import '../../core/location/location_service.dart';
@@ -20,9 +21,12 @@ enum _Phase { checking, opened, failed }
 /// The unlock moment: rings converge while the server verifies you're there, then burst open.
 /// Pops `true` when the drop was unlocked.
 class UnlockPage extends StatefulWidget {
-  const UnlockPage({super.key, required this.drop});
+  const UnlockPage({super.key, required this.drop, this.onUnlocked});
 
   final NearbyDrop drop;
+
+  /// Called with the drop id on success, so the map can update without a refetch.
+  final ValueChanged<String>? onUnlocked;
 
   @override
   State<UnlockPage> createState() => _UnlockPageState();
@@ -77,6 +81,7 @@ class _UnlockPageState extends State<UnlockPage> with TickerProviderStateMixin {
 
     if (content != null) {
       setState(() => _phase = _Phase.opened);
+      widget.onUnlocked?.call(widget.drop.id);
       HapticFeedback.heavyImpact();
       await _burst.forward();
       if (!mounted) return;
@@ -100,6 +105,14 @@ class _UnlockPageState extends State<UnlockPage> with TickerProviderStateMixin {
       HapticFeedback.mediumImpact();
       _shake.forward(from: 0);
     }
+  }
+
+  String _failureText() {
+    final rules = widget.drop.conditions;
+    if (_error?.code == 'condition_locked' && rules != null && rules.isNotEmpty) {
+      return 'This one only opens ${describeConditions(rules)}. Come back then.';
+    }
+    return _error?.message ?? '';
   }
 
   @override
@@ -185,7 +198,7 @@ class _UnlockPageState extends State<UnlockPage> with TickerProviderStateMixin {
                           switch (_phase) {
                             _Phase.checking => widget.drop.teaser ?? 'Hold still for a moment.',
                             _Phase.opened => 'Opening…',
-                            _Phase.failed => _error?.message ?? '',
+                            _Phase.failed => _failureText(),
                           },
                           textAlign: TextAlign.center,
                           style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: TraceColors.textMuted),

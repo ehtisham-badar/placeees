@@ -1,10 +1,13 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:trace/core/api/api_error.dart';
+import 'package:trace/core/api/conditions.dart';
 import 'package:trace/core/api/demo_api.dart';
 import 'package:trace/core/api/geo.dart';
 import 'package:trace/core/api/models.dart';
+import 'package:trace/core/api/sun.dart';
 import 'package:trace/core/format.dart';
+import 'package:trace/features/compass/hot_cold.dart';
 
 void main() {
   group('format', () {
@@ -69,14 +72,108 @@ void main() {
       expect((await api.passport()).unlocked.single.id, far.id);
     });
 
-    test('conditional drops stay locked', () async {
+    test('conditional drops stay locked until their moment', () async {
       final api = DemoApi();
       final drops = await api.nearby(here.latitude, here.longitude);
-      final night = drops.firstWhere((d) => d.hasCondition);
+      // Demo weather is always clear, so the rain drop never opens.
+      final rain = drops.firstWhere((d) => d.conditionKinds.contains('weather'));
+      expect(rain.conditions, isNull, reason: 'its rule is not revealed');
       expect(
-        () => api.unlock(night.id, fixAt(api.truePointOf(night.id)!)),
+        () => api.unlock(rain.id, fixAt(api.truePointOf(rain.id)!)),
         throwsA(isA<ApiError>().having((e) => e.code, 'code', 'condition_locked')),
+      );
+      final night = drops.firstWhere((d) => d.conditionKinds.contains('night'));
+      expect(night.conditions, isNotNull, reason: 'its rule is revealed');
+    });
+
+    test('sealed capsules stay locked', () async {
+      final api = DemoApi();
+      final drops = await api.nearby(here.latitude, here.longitude);
+      final capsule = drops.firstWhere((d) => d.forYou);
+      expect(capsule.isSealed, isTrue);
+      expect(
+        () => api.unlock(capsule.id, fixAt(api.truePointOf(capsule.id)!)),
+        throwsA(isA<ApiError>().having((e) => e.code, 'code', 'capsule_locked')),
+      );
+    });
+
+    test('near hint only within 100 m', () async {
+      final api = DemoApi();
+      final drops = await api.nearby(here.latitude, here.longitude);
+      final far = drops.firstWhere((d) => d.teaser == 'Exam week survival kit.');
+      expect(() => api.nearHint(far.id, fixAt(here)), throwsA(isA<ApiError>()));
+      final truth = api.truePointOf(far.id)!;
+      final hint = await api.nearHint(far.id, fixAt(offsetBy(truth, 0, 60)));
+      expect(hint.point, truth);
+      expect(hint.isValid, isTrue);
+    });
+
+    test('rejects capsules sealed for less than a day', () async {
+      final api = DemoApi();
+      await api.nearby(here.latitude, here.longitude);
+      expect(
+        () => api.createDrop(
+          type: DropType.text,
+          fix: fixAt(here),
+          body: 'hi',
+          unlockAt: DateTime.now().add(const Duration(hours: 2)),
+        ),
+        throwsA(isA<ApiError>().having((e) => e.code, 'code', 'capsule_too_soon')),
       );
     });
   });
+
+group('sun', () {
+  // The server's suncalc 2.x uses refined Meeus series; this classic port (demo mode only)
+  // stays within a few minutes, well inside the 45-minute sun windows.
+  test('matches suncalc on the server to within 3 minutes', () {
+    final t = SunTimes.of(DateTime.utc(2026, 10, 4, 7), 31.5204, 74.3587);
+    void near(DateTime? actual, String expected) =>
+        expect(actual!.difference(DateTime.parse(expected)).inSeconds.abs(), lessThan(180));
+    near(t.sunrise, '2026-10-04T00:58:02.737Z');
+    near(t.sunset, '2026-10-04T12:44:11.849Z');
+    near(t.dawn, '2026-10-04T00:33:45.283Z');
+    near(t.dusk, '2026-10-04T13:08:27.708Z');
+    near(t.goldenHour, '2026-10-04T12:11:55.491Z');
+    near(t.goldenHourEnd, '2026-10-04T01:30:20.835Z');
+  });
+
+  test('polar night has no sunset', () {
+    expect(SunTimes.of(DateTime.utc(2026, 12, 21, 12), 85, 0).sunset, isNull);
+  });
+});
+
+group('hot/cold', () {
+  test('pulse interval spans 2 s to 0.15 s and shrinks as you close in', () {
+    expect(pulseInterval(400), const Duration(milliseconds: 2000));
+    expect(pulseInterval(300), const Duration(milliseconds: 2000));
+    expect(pulseInterval(10), const Duration(milliseconds: 150));
+    expect(pulseInterval(100) < pulseInterval(200), isTrue);
+    expect(pulseInterval(30) < pulseInterval(100), isTrue);
+  });
+
+  test('alignment is 1 dead ahead and 0 behind', () {
+    expect(alignment(0), closeTo(1, 1e-9));
+    expect(alignment(180), closeTo(0, 1e-9));
+    expect(alignment(90), closeTo(0.5, 1e-9));
+    expect(alignment(null), isNull);
+  });
+});
+
+test('conditions read naturally', () {
+  expect(
+    describeConditions(const [SunCondition(SunPhase.sunset), WeatherCondition(WeatherKind.rain)]),
+    'around sunset and when it’s raining',
+  );
+  expect(
+    describeConditions(const [
+      SunCondition(SunPhase.night),
+      WeatherCondition(WeatherKind.fog),
+      TimeRangeCondition('20:00', '04:00', 'Asia/Karachi'),
+    ]),
+    'at night, in the fog and between 20:00 and 04:00',
+  );
+  final json = const TimeRangeCondition('20:00', '04:00', 'Asia/Karachi').toJson();
+  expect(DropCondition.fromJson(json), isA<TimeRangeCondition>());
+});
 }

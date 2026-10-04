@@ -20,6 +20,7 @@
     "fastify": "^5.12.5",
     "jose": "^6.2.12",
     "postgres": "^3.4.9",
+    "suncalc": "^2.1.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {

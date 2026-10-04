@@ -3,6 +3,7 @@ import { ZodError } from 'zod';
 import { authRoutes } from './auth/routes.js';
 import { dropRoutes } from './drops/routes.js';
 import { AppError } from './lib/errors.js';
+import { deviceRoutes } from './push/routes.js';
 import { safetyRoutes } from './safety/routes.js';
 import { userRoutes } from './users/routes.js';
 
@@ -21,5 +22,6 @@ export function buildApp() {
   app.register(userRoutes);
   app.register(dropRoutes);
   app.register(safetyRoutes);
+  app.register(deviceRoutes);
   return app;
 }

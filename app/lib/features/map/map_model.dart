@@ -51,26 +51,7 @@ class MapModel extends ChangeNotifier {
   }
 
   void markUnlocked(String id) {
-    drops = [
-      for (final d in drops)
-        if (d.id == id)
-          NearbyDrop(
-            id: d.id,
-            type: d.type,
-            teaser: d.teaser,
-            createdAt: d.createdAt,
-            center: d.center,
-            radius: d.radius,
-            mine: d.mine,
-            unlocked: true,
-            pending: d.pending,
-            hasCondition: d.hasCondition,
-            capsuleUnlockAt: d.capsuleUnlockAt,
-            isRelay: d.isRelay,
-          )
-        else
-          d,
-    ];
+    drops = [for (final d in drops) d.id == id ? d.copyWith(unlocked: true) : d];
     notifyListeners();
   }
 }
