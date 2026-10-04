@@ -496,6 +496,12 @@ class DemoApi implements TraceApi {
   @override
   Future<void> track(List<AppEvent> events) async {} // demo mode records nothing
 
+  @override
+  Future<void> registerDevice(String token, String platform) async {}
+
+  @override
+  Future<void> unregisterDevice(String token) async {}
+
   /// Demo venue: the chai stall drop, as if a QR poster hung there.
   static const demoVenueCode = 'CHA23456';
 

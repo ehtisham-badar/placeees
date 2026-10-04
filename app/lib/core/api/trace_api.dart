@@ -66,6 +66,10 @@ abstract class TraceApi {
   Future<List<CarriedRelay>> carrying();
   Future<RelayJourney> relayJourney(String dropId);
 
+  // Push (device tokens)
+  Future<void> registerDevice(String token, String platform);
+  Future<void> unregisterDevice(String token);
+
   // Metrics (§11)
   Future<void> track(List<AppEvent> events);
 

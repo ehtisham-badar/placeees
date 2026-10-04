@@ -15,7 +15,7 @@ const ADMIN = { 'x-admin-token': 'test-admin-token-test-admin-token' };
 let app: FastifyInstance;
 const users: Record<string, { token: string; id: string }> = {};
 
-async function call(who: string | null, method: 'GET' | 'POST' | 'PATCH' | 'PUT', url: string, payload?: unknown) {
+async function call(who: string | null, method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE', url: string, payload?: unknown) {
   const headers = who ? { authorization: `Bearer ${users[who]!.token}` } : {};
   const res = await app.inject({ method, url, payload: payload as never, headers });
   return { status: res.statusCode, body: res.body ? (res.json() as any) : null };
@@ -276,5 +276,21 @@ describe('surfaces & admin', () => {
     // Every target has a matching metric, so the admin dashboard can show them all.
     for (const key of Object.keys(m.targets)) expect(m.metrics, key).toHaveProperty(key);
     expect(m.unlockFailures[0]).toEqual({ reason: 'too_far', count: 1 });
+  });
+});
+
+describe('push devices', () => {
+  it('registers, moves between accounts, and unregisters', async () => {
+    const token = 'f'.repeat(64);
+    expect((await call('alice', 'POST', '/v1/devices', { token, platform: 'ios' })).status).toBe(204);
+    // Same phone, different account: the token follows whoever registered it last.
+    expect((await call('bob', 'POST', '/v1/devices', { token, platform: 'ios' })).status).toBe(204);
+    const [row] = await sql`SELECT user_id FROM devices WHERE token = ${token}`;
+    expect(row!.userId).toBe(users.bob!.id);
+    // Only the owner can remove it.
+    await call('alice', 'DELETE', `/v1/devices/${token}`);
+    expect((await sql`SELECT 1 FROM devices WHERE token = ${token}`).length).toBe(1);
+    await call('bob', 'DELETE', `/v1/devices/${token}`);
+    expect((await sql`SELECT 1 FROM devices WHERE token = ${token}`).length).toBe(0);
   });
 });

@@ -12,6 +12,9 @@ import 'features/onboarding/welcome_page.dart';
 import 'features/venues/link_handler.dart';
 import 'ui/pulse_rings.dart';
 
+/// The app's navigator, so links and notification taps can open screens from anywhere.
+final rootNavigator = GlobalKey<NavigatorState>();
+
 class TraceApp extends StatefulWidget {
   const TraceApp({super.key});
 
@@ -20,7 +23,7 @@ class TraceApp extends StatefulWidget {
 }
 
 class _TraceAppState extends State<TraceApp> {
-  final _navigator = GlobalKey<NavigatorState>();
+  final _navigator = rootNavigator;
 
   @override
   Widget build(BuildContext context) {

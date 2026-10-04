@@ -244,6 +244,13 @@ class LiveApi implements TraceApi {
       RelayJourney.fromJson(await _send('GET', '/v1/relays/$dropId/journey') as Map<String, dynamic>);
 
   @override
+  Future<void> registerDevice(String token, String platform) =>
+      _send('POST', '/v1/devices', body: {'token': token, 'platform': platform});
+
+  @override
+  Future<void> unregisterDevice(String token) => _send('DELETE', '/v1/devices/${Uri.encodeComponent(token)}');
+
+  @override
   Future<void> track(List<AppEvent> events) async {
     if (token == null || events.isEmpty) return;
     await _send('POST', '/v1/events', body: {

@@ -51,6 +51,11 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- Background pushes land in the app's "Activity" channel. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="activity" />
+
         <!-- Home-screen widget (spec F-15). -->
         <receiver android:name=".TraceWidgetProvider" android:exported="false">
             <intent-filter>

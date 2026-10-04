@@ -6,6 +6,7 @@ import 'package:trace/core/api/demo_api.dart';
 import 'package:trace/core/api/geo.dart';
 import 'package:trace/core/api/models.dart';
 import 'package:trace/core/integrity/integrity_service.dart';
+import 'package:trace/core/push/push_service.dart';
 import 'package:trace/core/widgets/home_summary.dart';
 import 'package:trace/features/venues/venue_code.dart';
 
@@ -93,5 +94,12 @@ void main() {
     expect(s.count, 2); // circle edges: a 150 m, b 450 m (c's is 550 m)
     expect(s.teaser, 'Look up.');
     expect(s.distance, '150 m');
+  });
+
+  test('push stays off in demo mode, with no prompts', () async {
+    final push = PushService(DemoApi(), openDrop: (_) {});
+    expect(push.available, isFalse);
+    expect(await push.enable(), isFalse);
+    expect(await push.shouldSoftAsk(), isFalse);
   });
 }

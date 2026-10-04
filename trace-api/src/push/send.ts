@@ -74,7 +74,13 @@ async function sendFcm(deviceToken: string, msg: PushMessage): Promise<'ok' | 'g
     method: 'POST',
     headers: { authorization: `Bearer ${await fcmToken()}`, 'content-type': 'application/json' },
     body: JSON.stringify({
-      message: { token: deviceToken, notification: { title: msg.title, body: msg.body }, data: msg.data },
+      message: {
+        token: deviceToken,
+        notification: { title: msg.title, body: msg.body },
+        data: msg.data,
+        // The app's "Activity" channel (created on first launch); high priority so it shows promptly.
+        android: { priority: 'high', notification: { channel_id: 'activity' } },
+      },
     }),
   });
   if (res.ok) return 'ok';

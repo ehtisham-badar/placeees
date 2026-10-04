@@ -19,5 +19,14 @@ class AppConfig {
   /// Google Cloud project number for Play Integrity (Android). Unset = no integrity tokens.
   static const playCloudProjectNumber = String.fromEnvironment('PLAY_CLOUD_PROJECT_NUMBER');
 
+  /// Firebase (Android push only). iOS push goes straight to APNs and needs none of this.
+  static const firebaseApiKey = String.fromEnvironment('FIREBASE_API_KEY');
+  static const firebaseAndroidAppId = String.fromEnvironment('FIREBASE_ANDROID_APP_ID');
+  static const firebaseSenderId = String.fromEnvironment('FIREBASE_SENDER_ID');
+  static const firebaseProjectId = String.fromEnvironment('FIREBASE_PROJECT_ID');
+
+  static bool get firebaseConfigured =>
+      firebaseApiKey.isNotEmpty && firebaseAndroidAppId.isNotEmpty && firebaseSenderId.isNotEmpty && firebaseProjectId.isNotEmpty;
+
   static bool get isDemo => apiUrl.isEmpty;
 }

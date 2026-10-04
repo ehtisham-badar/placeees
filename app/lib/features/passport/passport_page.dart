@@ -12,6 +12,7 @@ import '../../ui/buttons.dart';
 import '../../ui/drop_glyph.dart';
 import '../../ui/pulse_rings.dart';
 import '../../core/alerts/nearby_alerts.dart';
+import '../../core/push/push_service.dart';
 import '../circles/circles_page.dart';
 import '../trails/stamp.dart';
 import '../trails/trail_builder_page.dart';
@@ -53,6 +54,7 @@ class _PassportPageState extends State<PassportPage> {
 
   Future<void> _settings() async {
     final session = context.read<Session>();
+    final push = context.read<PushService>();
     final nav = Navigator.of(context);
     final signOut = await showModalBottomSheet<bool>(
       context: context,
@@ -63,6 +65,7 @@ class _PassportPageState extends State<PassportPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              const _PushTile(),
               const _AlertsTile(),
               const Divider(height: 1, color: TraceColors.line),
               ListTile(
@@ -76,6 +79,8 @@ class _PassportPageState extends State<PassportPage> {
       ),
     );
     if (signOut == true) {
+      // Unregister while still signed in, so this phone stops getting the account's pushes.
+      await push.stop();
       nav.popUntil((r) => r.isFirst);
       await session.signOut();
     }
@@ -438,6 +443,48 @@ class _AlertsTileState extends State<_AlertsTile> {
       value: alerts.enabled,
       activeTrackColor: TraceColors.sun,
       onChanged: _busy ? null : (v) => _toggle(alerts, v),
+    );
+  }
+}
+
+/// Pushes for capsules, echoes and relay deadlines. Hidden where push isn't available (demo mode).
+class _PushTile extends StatefulWidget {
+  const _PushTile();
+
+  @override
+  State<_PushTile> createState() => _PushTileState();
+}
+
+class _PushTileState extends State<_PushTile> {
+  bool _busy = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final push = context.watch<PushService>();
+    if (!push.available) return const SizedBox.shrink();
+    return SwitchListTile.adaptive(
+      secondary: const Icon(Icons.notifications_rounded, color: TraceColors.ember),
+      title: const Text('Notifications', style: TextStyle(fontWeight: FontWeight.w700)),
+      subtitle: const Text(
+        'Capsules opening, echoes on your drops, relay reminders.',
+        style: TextStyle(color: TraceColors.textMuted, fontSize: 12),
+      ),
+      value: push.enabled,
+      activeTrackColor: TraceColors.ember,
+      onChanged: _busy
+          ? null
+          : (on) async {
+              final messenger = ScaffoldMessenger.of(context);
+              setState(() => _busy = true);
+              if (on) {
+                if (!await push.enable()) {
+                  messenger.showSnackBar(const SnackBar(content: Text('Notifications are off for Trace. Turn them on in Settings.')));
+                }
+              } else {
+                await push.stop();
+              }
+              if (mounted) setState(() => _busy = false);
+            },
     );
   }
 }

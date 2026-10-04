@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api/geo.dart';
 import '../api/models.dart';
+import '../push/notifications.dart';
 
 const maxGeofences = 20;
 const maxAlertsPerDay = 3;
@@ -40,19 +41,6 @@ Future<bool> claimAlert(SharedPreferences prefs, String dropId, DateTime now) as
   return true;
 }
 
-final _notifications = FlutterLocalNotificationsPlugin();
-
-Future<void> _initNotifications() => _notifications.initialize(
-      settings: const InitializationSettings(
-        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
-        iOS: DarwinInitializationSettings(
-          requestAlertPermission: false,
-          requestBadgePermission: false,
-          requestSoundPermission: false,
-        ),
-      ),
-    );
-
 /// Runs in a background isolate when the OS reports entering a watched drop's circle.
 @pragma('vm:entry-point')
 Future<void> onGeofence(GeofenceCallbackParams params) async {
@@ -63,9 +51,9 @@ Future<void> onGeofence(GeofenceCallbackParams params) async {
 
   for (final g in params.geofences) {
     if (!await claimAlert(prefs, g.id, DateTime.now())) continue;
-    await _initNotifications();
+    await initLocalNotifications();
     final teaser = prefs.getString(_teaserKey(g.id));
-    await _notifications.show(
+    await localNotifications.show(
       id: g.id.hashCode & 0x7fffffff,
       title: 'Something is waiting nearby',
       body: teaser == null || teaser.isEmpty ? 'A drop is glowing within a few steps of you.' : '“$teaser”',
@@ -98,13 +86,13 @@ class NearbyAlerts extends ChangeNotifier {
 
   /// Asks for notifications and "always" location, then turns alerts on. Returns whether it worked.
   Future<bool> enable() async {
-    await _initNotifications();
+    await initLocalNotifications();
     if (Platform.isAndroid) {
-      await _notifications
+      await localNotifications
           .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
           ?.requestNotificationsPermission();
     } else if (Platform.isIOS) {
-      await _notifications
+      await localNotifications
           .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
           ?.requestPermissions(alert: true, sound: true);
     }

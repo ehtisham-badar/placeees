@@ -18,6 +18,7 @@ import '../../core/theme/tokens.dart';
 import '../../ui/buttons.dart';
 import '../../ui/drop_glyph.dart';
 import '../../ui/pulse_rings.dart';
+import '../../core/push/soft_ask.dart';
 import 'image_compress.dart';
 import 'rules_section.dart';
 import 'then_now_field.dart';
@@ -131,6 +132,8 @@ class _ComposerPageState extends State<ComposerPage> {
       HapticFeedback.heavyImpact();
       setState(() => _done = true);
       await Future.delayed(const Duration(milliseconds: 2200));
+      if (!mounted) return;
+      await maybeAskForPush(context, _rules.capsuleAt != null ? PushReason.capsule : PushReason.drop);
       if (mounted) Navigator.pop(context, true);
     } on ApiError catch (e) {
       _toast(e.message);

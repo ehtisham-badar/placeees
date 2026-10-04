@@ -11,6 +11,7 @@ import '../../core/location/location_service.dart';
 import '../../core/theme/theme.dart';
 import '../../core/theme/tokens.dart';
 import '../../ui/buttons.dart';
+import '../../core/push/soft_ask.dart';
 import 'relay_journey_page.dart';
 
 /// On an opened relay drop: how far it's travelled, and the chance to carry it on (spec F-13).
@@ -42,6 +43,7 @@ class _RelayPanelState extends State<RelayPanel> {
       messenger.showSnackBar(SnackBar(
         content: Text('It’s in your pocket. Leave it at least 1 km away by ${DateFormat.MMMd().format(deadline)}.'),
       ));
+      if (mounted) await maybeAskForPush(context, PushReason.relay);
       widget.onPickedUp();
     } on ApiError catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.code == 'too_far' ? 'Pick it up while you’re standing here.' : e.message)));
