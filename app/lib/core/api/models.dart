@@ -33,7 +33,14 @@ class User {
 
 /// A single GPS fix, sent with every location-bearing request (spec F-04).
 class LocationFix {
-  const LocationFix({required this.lat, required this.lng, required this.accuracy, required this.timestamp, this.speed});
+  const LocationFix({
+    required this.lat,
+    required this.lng,
+    required this.accuracy,
+    required this.timestamp,
+    this.speed,
+    this.mocked = false,
+  });
 
   final double lat;
   final double lng;
@@ -41,14 +48,21 @@ class LocationFix {
   final double? speed;
   final DateTime timestamp;
 
+  /// The OS says this fix came from a mock-location provider.
+  final bool mocked;
+
   LatLng get point => LatLng(lat, lng);
+
+  /// The timestamp exactly as sent (and signed).
+  String get timestampWire => timestamp.toUtc().toIso8601String();
 
   Map<String, dynamic> toJson() => {
         'lat': lat,
         'lng': lng,
         'accuracy': accuracy,
         if (speed != null) 'speed': speed,
-        'timestamp': timestamp.toUtc().toIso8601String(),
+        'timestamp': timestampWire,
+        if (mocked) 'mocked': true,
       };
 }
 

@@ -9,6 +9,8 @@ import '../../core/auth/session.dart';
 import '../../core/config.dart';
 import '../../core/api/signature.dart';
 import '../../core/events.dart';
+import '../../core/alerts/nearby_alerts.dart';
+import '../../core/widgets/home_summary.dart';
 import '../../core/location/location_service.dart';
 import '../../core/theme/tokens.dart';
 import '../../ui/buttons.dart';
@@ -18,6 +20,7 @@ import '../compass/compass_page.dart';
 import '../create/composer_page.dart';
 import '../passport/passport_page.dart';
 import '../relays/carrying_page.dart';
+import '../venues/scanner_page.dart';
 import '../unlock/drop_detail_page.dart';
 import '../unlock/unlock_page.dart';
 import 'drop_card.dart';
@@ -31,7 +34,14 @@ class MapPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (context) => MapModel(context.read<TraceApi>()),
+      create: (context) {
+        final alerts = context.read<NearbyAlerts>();
+        return MapModel(context.read<TraceApi>())
+          ..onLoaded = (drops, here) {
+            updateHomeWidget(drops, here);
+            alerts.sync(drops, here);
+          };
+      },
       child: const _MapView(),
     );
   }
@@ -382,8 +392,8 @@ class _TopBar extends StatelessWidget {
                         model.loading && model.drops.isEmpty
                             ? 'Looking around…'
                             : locked == 0
-                                ? 'Nothing waiting nearby'
-                                : '$locked ${locked == 1 ? 'drop' : 'drops'} waiting nearby',
+                                ? 'Nothing nearby yet'
+                                : '$locked ${locked == 1 ? 'drop' : 'drops'} nearby',
                         style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -396,6 +406,12 @@ class _TopBar extends StatelessWidget {
               ),
             ),
           ),
+        ),
+        const SizedBox(width: Space.sm),
+        OrbButton(
+          icon: Icons.qr_code_scanner_rounded,
+          tooltip: 'Scan a code',
+          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ScannerPage())),
         ),
         const SizedBox(width: Space.sm),
         Pressable(

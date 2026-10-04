@@ -11,6 +11,7 @@ import '../../core/theme/tokens.dart';
 import '../../ui/buttons.dart';
 import '../../ui/drop_glyph.dart';
 import '../../ui/pulse_rings.dart';
+import '../../core/alerts/nearby_alerts.dart';
 import '../circles/circles_page.dart';
 import '../trails/stamp.dart';
 import '../trails/trail_builder_page.dart';
@@ -59,10 +60,17 @@ class _PassportPageState extends State<PassportPage> {
         child: Container(
           margin: const EdgeInsets.all(Space.sm + 4),
           decoration: BoxDecoration(color: TraceColors.surfaceHigh, borderRadius: BorderRadius.circular(Radii.lg)),
-          child: ListTile(
-            leading: const Icon(Icons.logout_rounded, color: TraceColors.rose),
-            title: const Text('Sign out', style: TextStyle(color: TraceColors.rose, fontWeight: FontWeight.w700)),
-            onTap: () => Navigator.pop(context, true),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const _AlertsTile(),
+              const Divider(height: 1, color: TraceColors.line),
+              ListTile(
+                leading: const Icon(Icons.logout_rounded, color: TraceColors.rose),
+                title: const Text('Sign out', style: TextStyle(color: TraceColors.rose, fontWeight: FontWeight.w700)),
+                onTap: () => Navigator.pop(context, true),
+              ),
+            ],
           ),
         ),
       ),
@@ -386,6 +394,50 @@ class _Empty extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Opt-in "you just walked past a drop" alerts (spec F-15).
+class _AlertsTile extends StatefulWidget {
+  const _AlertsTile();
+
+  @override
+  State<_AlertsTile> createState() => _AlertsTileState();
+}
+
+class _AlertsTileState extends State<_AlertsTile> {
+  bool _busy = false;
+
+  Future<void> _toggle(NearbyAlerts alerts, bool on) async {
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _busy = true);
+    if (on) {
+      final ok = await alerts.enable();
+      if (!ok) {
+        messenger.showSnackBar(const SnackBar(
+          content: Text('Nearby alerts need location set to “Allow all the time”. You can change it in Settings.'),
+        ));
+      }
+    } else {
+      await alerts.disable();
+    }
+    if (mounted) setState(() => _busy = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final alerts = context.watch<NearbyAlerts>();
+    return SwitchListTile.adaptive(
+      secondary: const Icon(Icons.notifications_active_rounded, color: TraceColors.sun),
+      title: const Text('Nearby alerts', style: TextStyle(fontWeight: FontWeight.w700)),
+      subtitle: const Text(
+        'A quiet nudge when you walk past a drop, at most 3 a day. Your location stays on your phone.',
+        style: TextStyle(color: TraceColors.textMuted, fontSize: 12),
+      ),
+      value: alerts.enabled,
+      activeTrackColor: TraceColors.sun,
+      onChanged: _busy ? null : (v) => _toggle(alerts, v),
     );
   }
 }

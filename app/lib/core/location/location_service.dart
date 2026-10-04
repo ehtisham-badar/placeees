@@ -89,6 +89,7 @@ class LocationService extends ChangeNotifier {
       accuracy: p.accuracy,
       speed: p.speed >= 0 ? p.speed : null,
       timestamp: p.timestamp,
+      mocked: p.isMocked,
     );
     notifyListeners();
   }

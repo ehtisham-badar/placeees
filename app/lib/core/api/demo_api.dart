@@ -10,6 +10,7 @@ import 'geo.dart';
 import 'models.dart';
 import 'signature.dart';
 import 'social.dart';
+import 'venue.dart';
 import 'sun.dart';
 import 'trace_api.dart';
 
@@ -489,6 +490,17 @@ class DemoApi implements TraceApi {
           ),
       ],
     );
+  }
+
+  /// Demo venue: the chai stall drop, as if a QR poster hung there.
+  static const demoVenueCode = 'CHA23456';
+
+  @override
+  Future<Venue> venue(String code) async {
+    await _latency(300);
+    final d = _drops['seed-2'];
+    if (code != demoVenueCode || d == null) throw const ApiError('not_found');
+    return Venue(code: code, name: 'Bilal’s chai stall', drop: d.toNearby(_unlockedAt.containsKey(d.id)));
   }
 
   @override

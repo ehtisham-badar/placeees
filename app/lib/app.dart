@@ -9,18 +9,27 @@ import 'features/onboarding/handle_page.dart';
 import 'features/onboarding/home_zone_page.dart';
 import 'features/onboarding/location_page.dart';
 import 'features/onboarding/welcome_page.dart';
+import 'features/venues/link_handler.dart';
 import 'ui/pulse_rings.dart';
 
-class TraceApp extends StatelessWidget {
+class TraceApp extends StatefulWidget {
   const TraceApp({super.key});
+
+  @override
+  State<TraceApp> createState() => _TraceAppState();
+}
+
+class _TraceAppState extends State<TraceApp> {
+  final _navigator = GlobalKey<NavigatorState>();
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Trace',
+      navigatorKey: _navigator,
       debugShowCheckedModeBanner: false,
       theme: buildTheme(),
-      home: const _Root(),
+      home: LinkHandler(navigator: _navigator, child: const _Root()),
     );
   }
 }

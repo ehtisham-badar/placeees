@@ -4,6 +4,7 @@ import 'conditions.dart';
 import 'models.dart';
 import 'signature.dart';
 import 'social.dart';
+import 'venue.dart';
 
 /// Everything the app needs from the backend. Implemented by [LiveApi] and [DemoApi].
 abstract class TraceApi {
@@ -63,6 +64,9 @@ abstract class TraceApi {
   Future<double> dropRelay(String dropId, LocationFix fix, {String? note});
   Future<List<CarriedRelay>> carrying();
   Future<RelayJourney> relayJourney(String dropId);
+
+  // Venues (F-16)
+  Future<Venue> venue(String code);
 
   // Then/Now (F-14)
   Future<List<NowPhoto>> nowPhotos(String dropId);

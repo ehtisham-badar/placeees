@@ -52,7 +52,12 @@ flutter run --dart-define=TRACE_API_URL=http://localhost:3000
 | api | `R2_*` | Cloudflare R2 for photo uploads |
 | api | `OPENAI_API_KEY` | Text + image moderation (local word filter otherwise) |
 | api | `APNS_*`, `FCM_*` | Push for opened time capsules (skipped when unset) |
-| api | `RUN_JOBS` | Run the capsule notification job in this process (default `true`) |
+| api | `RUN_JOBS` | Run background jobs (capsules, relay returns) in this process (default `true`) |
+| api | `INTEGRITY_MODE` | `off` / `report` / `enforce` for App Attest + Play Integrity |
+| api | `APPLE_TEAM_ID`, `ANDROID_CERT_SHA256`, `GOOGLE_SA_*` | Attestation and app-link verification |
+| api | `ADMIN_TOKEN` | Enables the admin API and the `/admin` console |
+| api | `PUBLIC_WEB_URL`, `APP_STORE_URL`, `PLAY_STORE_URL` | Venue links and their landing page |
+| app | `PLAY_CLOUD_PROJECT_NUMBER` | Enables Play Integrity tokens on Android |
 
 Google sign-in on iOS also needs the reversed client id added as a URL scheme in
 `ios/Runner/Info.plist`; Sign in with Apple needs a signing team with the capability enabled.
@@ -89,5 +94,18 @@ members-only drops (F-12).
 drop again, with a journey map and auto-return (F-13); Then/Now drops with a saved camera angle,
 a ghost-overlay alignment camera and a "now" timeline (F-14).
 
-**Next — Phase 5 (surfaces & hardening):** widgets and region notifications (F-15), App Clip /
-Android instant link (F-16), App Attest + Play Integrity, rate limits (F-17).
+**Phase 5 — surfaces & hardening (done):** home-screen widget and opt-in nearby alerts (F-15);
+venue QR/NFC links with a web landing page and in-app scanner (F-16); App Attest / Play Integrity
+on every location request, mock-location detection, rate limits, ban enforcement (F-17); and the
+admin console at `/admin` (F-05).
+
+**Next — Phase 6 (pilot):** deploy to Railway, run against real Postgres, CI, seed a campus,
+TestFlight / Play internal testing, metrics (§10–§12).
+
+### Rolling out integrity checks
+
+1. Ship with `INTEGRITY_MODE=report` and watch the Integrity tab in `/admin`.
+2. iOS: set `APPLE_TEAM_ID`; add the **App Attest** capability to the Runner target.
+3. Android: link the app to a Google Cloud project in Play Console, set `GOOGLE_SA_*` on the API and
+   build the app with `--dart-define=PLAY_CLOUD_PROJECT_NUMBER=<number>`.
+4. When false positives are near zero, switch to `INTEGRITY_MODE=enforce`.

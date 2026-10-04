@@ -6,6 +6,7 @@ import { assertPresentAt } from '../drops/service.js';
 import { LocationPayload } from '../integrity/location.js';
 import { AppError, notFound } from '../lib/errors.js';
 import { ownsMediaKey, signedReadUrl } from '../media/r2.js';
+import { limitAction } from '../lib/rateLimit.js';
 import { moderate } from '../moderation/moderate.js';
 
 export const MAX_NOW_PHOTOS_PER_DAY = 10;
@@ -65,6 +66,7 @@ export async function thenNowRoutes(app: FastifyInstance) {
       })
       .parse(req.body);
 
+    await limitAction(req.userId, 'nowPhoto');
     await assertThenNowAccess(req.userId, id);
     if (!ownsMediaKey(req.userId, body.mediaKey)) throw new AppError('media_not_owned', 403);
     const [{ today } = { today: 0 }] = await sql<{ today: number }[]>`

@@ -3,6 +3,9 @@ import { AppError, notFound } from '../lib/errors.js';
 import { distanceM, geohash } from '../lib/geo.js';
 import { checkFreshness, isImpossibleTravel, type LocationPayload } from '../integrity/location.js';
 import { previousFix, recordFix } from '../integrity/fixes.js';
+import { recordIntegrityEvent } from '../integrity/events.js';
+import { assertTrustedPayload } from '../integrity/verify.js';
+import { limitAction } from '../lib/rateLimit.js';
 import { moderate } from '../moderation/moderate.js';
 import { ownsMediaKey, signedReadUrl } from '../media/r2.js';
 import { conditionsMet } from '../conditions/evaluate.js';
@@ -88,10 +91,15 @@ async function assertCanPlaceAt(userId: string, p: LocationPayload, cell: string
 async function assertTrustworthyFix(userId: string, p: LocationPayload) {
   const stale = checkFreshness(p);
   if (stale) throw new AppError(stale, 422);
-  if (isImpossibleTravel(await previousFix(userId), p)) throw new AppError('suspicious', 422);
+  await assertTrustedPayload(userId, p);
+  if (isImpossibleTravel(await previousFix(userId), p)) {
+    await recordIntegrityEvent(userId, 'impossible_travel', { lat: p.lat, lng: p.lng });
+    throw new AppError('suspicious', 422);
+  }
 }
 
 export async function createDrop(userId: string, input: CreateDropInput) {
+  await limitAction(userId, 'createDrop');
   const p = input.location;
   await assertTrustworthyFix(userId, p);
   if (p.accuracy > MAX_CREATE_ACCURACY_M) throw new AppError('low_accuracy', 422);
@@ -352,6 +360,8 @@ export async function getDropContent(userId: string, dropId: string) {
 }
 
 export async function unlockDrop(userId: string, dropId: string, p: LocationPayload) {
+  await limitAction(userId, 'unlock');
+  await assertTrustedPayload(userId, p);
   const drop = await locateDrop(userId, dropId, p);
   const failure = await evaluateUnlock({
     payload: p,
@@ -369,6 +379,7 @@ export async function unlockDrop(userId: string, dropId: string, p: LocationPayl
         weather: () => currentWeather(drop.lat, drop.lng),
       }),
   });
+  if (failure === 'suspicious') await recordIntegrityEvent(userId, 'impossible_travel', { dropId });
   if (failure) throw new AppError(failure, failure === 'not_visible' ? 404 : 422);
 
   await recordFix(userId, p);
@@ -419,6 +430,8 @@ async function locateDrop(userId: string, dropId: string, p: LocationPayload): P
  * final approach can home in on it. Same integrity checks as an unlock.
  */
 export async function nearHint(userId: string, dropId: string, p: LocationPayload) {
+  await limitAction(userId, 'nearHint');
+  await assertTrustedPayload(userId, p);
   const stale = checkFreshness(p);
   if (stale) throw new AppError(stale, 422);
   if (p.accuracy > 80) throw new AppError('low_accuracy', 422);
@@ -437,8 +450,10 @@ export async function nearHint(userId: string, dropId: string, p: LocationPayloa
 
 /** Proximity check for location-bound actions on a drop other than unlocking it (echoes). */
 export async function assertPresentAt(userId: string, dropId: string, p: LocationPayload) {
+  await assertTrustedPayload(userId, p);
   const drop = await locateDrop(userId, dropId, p);
   const failure = presenceFailure({ payload: p, previousFix: await previousFix(userId), distanceM: drop.distanceM });
+  if (failure === 'suspicious') await recordIntegrityEvent(userId, 'impossible_travel', { dropId });
   if (failure) throw new AppError(failure, 422);
   await recordFix(userId, p);
 }

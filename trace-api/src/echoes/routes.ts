@@ -5,6 +5,7 @@ import { sql } from '../db/client.js';
 import { assertPresentAt } from '../drops/service.js';
 import { LocationPayload } from '../integrity/location.js';
 import { AppError, notFound } from '../lib/errors.js';
+import { limitAction } from '../lib/rateLimit.js';
 import { moderate } from '../moderation/moderate.js';
 import { pushToUsers } from '../push/send.js';
 
@@ -51,6 +52,7 @@ export async function echoRoutes(app: FastifyInstance) {
       .object({ body: z.string().trim().min(1).max(280), location: LocationPayload })
       .parse(req.body);
 
+    await limitAction(req.userId, 'echo');
     const drop = await assertCanRead(req.userId, id);
     const [{ today } = { today: 0 }] = await sql<{ today: number }[]>`
       SELECT count(*)::int AS today FROM echoes WHERE user_id = ${req.userId} AND created_at > now() - interval '1 day'`;

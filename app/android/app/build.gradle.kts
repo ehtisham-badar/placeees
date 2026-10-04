@@ -6,10 +6,13 @@ plugins {
 
 android {
     namespace = "app.trace.trace"
-    compileSdk = flutter.compileSdkVersion
+    // 37: required by permission_handler_android. targetSdk stays on Flutter's default.
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        // flutter_local_notifications uses java.time APIs on older Android versions.
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -46,4 +49,10 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // Play Integrity standard requests for signed location payloads (spec F-17).
+    implementation("com.google.android.play:integrity:1.4.0")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 }

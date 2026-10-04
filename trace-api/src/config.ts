@@ -30,6 +30,24 @@ const Env = z.object({
   FCM_PROJECT_ID: z.string().default(''),
   FCM_CLIENT_EMAIL: z.string().default(''),
   FCM_PRIVATE_KEY: z.string().default(''),
+  // F-17 integrity: off (dev), report (log only) or enforce (reject untrusted requests).
+  INTEGRITY_MODE: z.enum(['off', 'report', 'enforce']).default('off'),
+  APPLE_TEAM_ID: z.string().default(''),
+  ANDROID_PACKAGE: z.string().default('app.trace.mobile'),
+  // Comma-separated SHA-256 fingerprints of the Android signing certs (for assetlinks.json).
+  ANDROID_CERT_SHA256: z
+    .string()
+    .default('')
+    .transform((s) => s.split(',').map((x) => x.trim()).filter(Boolean)),
+  // Google service account for Play Integrity decoding (falls back to the FCM one).
+  GOOGLE_SA_CLIENT_EMAIL: z.string().default(''),
+  GOOGLE_SA_PRIVATE_KEY: z.string().default(''),
+  // F-05 admin API and page. Unset = admin disabled.
+  ADMIN_TOKEN: z.string().default(''),
+  // F-16 venue links.
+  PUBLIC_WEB_URL: z.string().default('https://trace.app'),
+  APP_STORE_URL: z.string().default(''),
+  PLAY_STORE_URL: z.string().default(''),
   RUN_JOBS: z
     .enum(['true', 'false', '1', '0'])
     .default('true')

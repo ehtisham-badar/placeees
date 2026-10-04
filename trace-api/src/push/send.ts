@@ -1,5 +1,6 @@
 import http2 from 'node:http2';
 import { SignJWT, importPKCS8 } from 'jose';
+import { googleAccessToken } from '../lib/googleAuth.js';
 import { config } from '../config.js';
 import { sql } from '../db/client.js';
 
@@ -62,28 +63,11 @@ async function sendApns(deviceToken: string, msg: PushMessage): Promise<'ok' | '
 // ---- FCM HTTP v1 (service-account OAuth) ----
 
 const fcmEnabled = Boolean(config.FCM_PROJECT_ID && config.FCM_CLIENT_EMAIL && config.FCM_PRIVATE_KEY);
-let fcmAccess: { token: string; expires: number } | null = null;
-
-async function fcmToken(): Promise<string> {
-  if (fcmAccess && Date.now() < fcmAccess.expires - 60_000) return fcmAccess.token;
-  const key = await importPKCS8(pem(config.FCM_PRIVATE_KEY), 'RS256');
-  const assertion = await new SignJWT({ scope: 'https://www.googleapis.com/auth/firebase.messaging' })
-    .setProtectedHeader({ alg: 'RS256' })
-    .setIssuer(config.FCM_CLIENT_EMAIL)
-    .setAudience('https://oauth2.googleapis.com/token')
-    .setIssuedAt()
-    .setExpirationTime('1h')
-    .sign(key);
-  const res = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion }),
-  });
-  if (!res.ok) throw new Error(`fcm oauth ${res.status}`);
-  const body = (await res.json()) as { access_token: string; expires_in: number };
-  fcmAccess = { token: body.access_token, expires: Date.now() + body.expires_in * 1000 };
-  return fcmAccess.token;
-}
+const fcmToken = () =>
+  googleAccessToken(
+    { clientEmail: config.FCM_CLIENT_EMAIL, privateKey: config.FCM_PRIVATE_KEY },
+    'https://www.googleapis.com/auth/firebase.messaging',
+  );
 
 async function sendFcm(deviceToken: string, msg: PushMessage): Promise<'ok' | 'gone' | 'error'> {
   const res = await fetch(`https://fcm.googleapis.com/v1/projects/${config.FCM_PROJECT_ID}/messages:send`, {

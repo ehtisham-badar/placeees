@@ -4,12 +4,25 @@
 <dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Trace uses your location to show drops nearby and to open them when you're there. Your live location is never shared.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>With nearby alerts on, Trace can tell you when you walk past a drop, even when the app is closed. Your location never leaves your phone for this.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Take a photo of where you are to leave it as a drop.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Choose a photo to leave as a drop.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Record a voice note to leave as a drop.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>app.trace.venue</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>trace</string>
+			</array>
+		</dict>
+	</array>
 	<key>UIStatusBarStyle</key>
 	<string>UIStatusBarStyleLightContent</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>

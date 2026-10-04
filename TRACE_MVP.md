@@ -285,7 +285,7 @@ The map marker shows the condition icon (🌅 / 🌧️ / 🌙) but not the exac
 - [ ] App Attest on all location-bearing requests
 - [ ] Impossible-travel detection, rate limits per user and per geohash
 - [ ] Anonymous drops allowed but always tied to an account server-side
-- [ ] Minimal admin panel: moderation queue, takedowns, user bans
+- [x] Minimal admin panel: moderation queue, takedowns, user bans (`/admin`)
 
 ---
 
@@ -555,9 +555,9 @@ trace-api/
 - [x] F-14 Then/Now overlay camera
 
 ### Week 10 — Surfaces & hardening
-- [ ] F-15 Widgets + region-monitoring notifications
-- [ ] F-16 App Clip
-- [ ] F-17 App Attest, impossible-travel, rate limits
+- [x] F-15 Widgets + region-monitoring notifications (Android widget ships; iOS widget needs a one-time Xcode target, see `app/ios/TraceWidget/README.md`)
+- [x] F-16 Venue codes: QR/NFC links, landing page, in-app scanner (App Clip target still to add in Xcode)
+- [x] F-17 App Attest + Play Integrity, mock-location flag, impossible-travel log, rate limits
 
 ### Week 11–12 — Pilot
 - [ ] Seed one campus: ~150 drops, 3 trails, 5 relays, 10 Then/Now spots
@@ -633,3 +633,10 @@ trace-api/
 | 2026-10-05 | Relays are always public (no capsule, circle or recipients) | Matches "travelling drop" intent; simpler visibility |
 | 2026-10-05 | Background jobs share one minute tick (`jobs/index.ts`): capsules, relay returns, deadline warnings | Each job claims rows atomically |
 | 2026-10-05 | Then/Now alignment tolerance ±5° on heading and pitch; pitch from the accelerometer | Matches spec; no gyro fusion needed at this tolerance |
+| 2026-10-05 | `INTEGRITY_MODE` off → report → enforce rollout | Measure false positives before rejecting anyone |
+| 2026-10-05 | Play Integrity outages fail open (logged), bad verdicts fail closed | An outage must not lock out every Android user |
+| 2026-10-05 | Signed location bytes: `trace-loc-v1|lat(6dp)|lng(6dp)|accuracy(1dp)|timestamp` | Fixed precision keeps Dart and JS byte-identical |
+| 2026-10-05 | Android Instant Apps replaced by https venue links + web landing page | Google discontinued Instant Apps; links work on both platforms |
+| 2026-10-05 | iOS widget, Live Activities and App Clip ship as source + Xcode steps | Extension targets need the team's signing and App Group; can't be generated safely by hand |
+| 2026-10-05 | Nearby alerts: 20 geofences on fuzzy circles, ≤3 a day, opt-in, on-device only | Matches spec F-15 without sending location history anywhere |
+| 2026-10-05 | Per-user action limits are in-memory | One API instance for the pilot; move to Redis when scaling out |

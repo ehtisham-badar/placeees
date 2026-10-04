@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'app.dart';
+import 'core/alerts/nearby_alerts.dart';
 import 'core/api/demo_api.dart';
 import 'core/api/live_api.dart';
 import 'core/api/trace_api.dart';
@@ -28,6 +29,7 @@ void main() {
         ChangeNotifierProvider(create: (_) => Session(api)..restore()),
         ChangeNotifierProvider(create: (_) => LocationService()),
         ChangeNotifierProvider(create: (_) => DataEvents()),
+        ChangeNotifierProvider(create: (_) => NearbyAlerts()..load()),
       ],
       child: const TraceApp(),
     ),

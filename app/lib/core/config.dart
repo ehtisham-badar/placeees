@@ -16,5 +16,8 @@ class AppConfig {
   /// Dev only: in demo mode, skip sign-in and onboarding and open straight on the map.
   static const demoAutostart = bool.fromEnvironment('DEMO_AUTOSTART');
 
+  /// Google Cloud project number for Play Integrity (Android). Unset = no integrity tokens.
+  static const playCloudProjectNumber = String.fromEnvironment('PLAY_CLOUD_PROJECT_NUMBER');
+
   static bool get isDemo => apiUrl.isEmpty;
 }

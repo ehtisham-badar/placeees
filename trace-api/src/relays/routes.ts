@@ -8,6 +8,8 @@ import { previousFix, recordFix } from '../integrity/fixes.js';
 import { checkFreshness, isImpossibleTravel, LocationPayload } from '../integrity/location.js';
 import { AppError, notFound } from '../lib/errors.js';
 import { geohash } from '../lib/geo.js';
+import { assertTrustedPayload } from '../integrity/verify.js';
+import { limitAction } from '../lib/rateLimit.js';
 import { moderate } from '../moderation/moderate.js';
 import { carryDeadline, dropFailure, pickupFailure } from './rules.js';
 
@@ -30,6 +32,7 @@ export async function relayRoutes(app: FastifyInstance) {
   app.post('/v1/relays/:id/pickup', async (req) => {
     const { id } = IdParam.parse(req.params);
     const { location } = z.object({ location: LocationPayload }).parse(req.body);
+    await limitAction(req.userId, 'relay');
 
     const [row] = await sql<{
       isRelay: boolean;
@@ -78,6 +81,7 @@ export async function relayRoutes(app: FastifyInstance) {
       .object({ location: LocationPayload, note: z.string().trim().max(140).optional() })
       .parse(req.body);
     const p = body.location;
+    await limitAction(req.userId, 'relay');
 
     const [hop] = await sql<{ id: string; distanceM: number; inHome: boolean; inZone: boolean }[]>`
       SELECT h.id,
@@ -95,6 +99,7 @@ export async function relayRoutes(app: FastifyInstance) {
     const stale = checkFreshness(p);
     if (stale) throw new AppError(stale, 422);
     if (p.accuracy > MAX_CREATE_ACCURACY_M) throw new AppError('low_accuracy', 422);
+    await assertTrustedPayload(req.userId, p);
     if (isImpossibleTravel(await previousFix(req.userId), p)) throw new AppError('suspicious', 422);
     const tooClose = dropFailure(hop.distanceM);
     if (tooClose) throw new AppError(tooClose, 422);

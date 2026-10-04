@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="trace_widget_description">How many drops are waiting near you</string>
+</resources>

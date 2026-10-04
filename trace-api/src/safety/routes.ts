@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireAuth } from '../auth/plugin.js';
 import { sql } from '../db/client.js';
 import { AppError, notFound } from '../lib/errors.js';
+import { limitAction } from '../lib/rateLimit.js';
 
 /** Hide a drop from everyone once this many distinct users have reported it, pending review. */
 export const AUTO_HIDE_REPORTS = 3;
@@ -18,6 +19,7 @@ export async function safetyRoutes(app: FastifyInstance) {
         reason: z.string().max(500).optional(),
       })
       .parse(req.body);
+    await limitAction(req.userId, 'report');
 
     await sql`
       INSERT INTO reports (reporter_id, target_type, target_id, reason)

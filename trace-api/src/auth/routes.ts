@@ -19,19 +19,22 @@ async function signIn(provider: Provider, sub: string) {
   return { token: await issueToken(user.id), user: serializeUser(user) };
 }
 
+// Sign-in is cheap to spam and expensive to verify: 10 a minute per IP.
+const strict = { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } };
+
 export async function authRoutes(app: FastifyInstance) {
-  app.post('/v1/auth/apple', async (req) => {
+  app.post('/v1/auth/apple', strict, async (req) => {
     const { identityToken } = z.object({ identityToken: z.string().min(1) }).parse(req.body);
     return signIn('apple_sub', await verifyAppleIdentity(identityToken));
   });
 
-  app.post('/v1/auth/google', async (req) => {
+  app.post('/v1/auth/google', strict, async (req) => {
     const { idToken } = z.object({ idToken: z.string().min(1) }).parse(req.body);
     return signIn('google_sub', await verifyGoogleIdentity(idToken));
   });
 
   if (config.ALLOW_DEV_LOGIN) {
-    app.post('/v1/auth/dev', async (req) => {
+    app.post('/v1/auth/dev', strict, async (req) => {
       const { name } = z.object({ name: z.string().min(1).max(40) }).parse(req.body);
       return signIn('dev_sub', name);
     });

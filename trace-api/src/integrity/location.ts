@@ -8,8 +8,13 @@ export const LocationPayload = z.object({
   accuracy: z.number().nonnegative(),
   speed: z.number().optional(),
   timestamp: z.iso.datetime({ offset: true }),
-  /** App Attest (iOS) / Play Integrity (Android) assertion. Enforced from F-17. */
-  assertion: z.string().optional(),
+  /** App Attest assertion (iOS, base64 CBOR) or Play Integrity token (Android) over locationClientData. */
+  assertion: z.string().max(20_000).optional(),
+  platform: z.enum(['ios', 'android']).optional(),
+  /** iOS App Attest key id the assertion was made with. */
+  keyId: z.string().max(100).optional(),
+  /** The OS reported this fix as coming from a mock-location provider. */
+  mocked: z.boolean().optional(),
 });
 export type LocationPayload = z.infer<typeof LocationPayload>;
 
@@ -36,4 +41,12 @@ export function isImpossibleTravel(prev: PreviousFix | null, p: LocationPayload)
   if (meters < 1_000) return false; // GPS jitter and small hops are never suspicious
   const seconds = Math.max(1, (Date.parse(p.timestamp) - prev.at.getTime()) / 1000);
   return (meters / seconds) * 3.6 > MAX_TRAVEL_KMH;
+}
+
+/**
+ * The exact bytes a client signs for a location payload. Fixed-precision formatting keeps Dart and
+ * JavaScript in agreement; the version prefix lets the format change later.
+ */
+export function locationClientData(p: Pick<LocationPayload, 'lat' | 'lng' | 'accuracy' | 'timestamp'>): string {
+  return `trace-loc-v1|${p.lat.toFixed(6)}|${p.lng.toFixed(6)}|${p.accuracy.toFixed(1)}|${p.timestamp}`;
 }

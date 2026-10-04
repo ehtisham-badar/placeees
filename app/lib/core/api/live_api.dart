@@ -3,18 +3,33 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
+import '../integrity/integrity_service.dart';
 import 'api_error.dart';
 import 'conditions.dart';
 import 'models.dart';
 import 'signature.dart';
 import 'social.dart';
+import 'venue.dart';
 import 'trace_api.dart';
 
 class LiveApi implements TraceApi {
-  LiveApi(String baseUrl) : _base = Uri.parse(baseUrl);
+  LiveApi(String baseUrl) : _base = Uri.parse(baseUrl) {
+    integrity = IntegrityService(
+      challenge: () async => ((await _send('POST', '/v1/attest/challenge')) as Map<String, dynamic>)['challenge'] as String,
+      register: (keyId, attestation, challenge) => _send(
+        'POST',
+        '/v1/attest/register',
+        body: {'keyId': keyId, 'attestation': attestation, 'challenge': challenge},
+      ),
+    );
+  }
 
   final Uri _base;
   final _client = http.Client();
+  late final IntegrityService integrity;
+
+  /// A location payload with its integrity fields attached.
+  Future<Map<String, dynamic>> _loc(LocationFix fix) async => {...fix.toJson(), ...await integrity.sign(fix)};
 
   @override
   String? token;
@@ -83,7 +98,7 @@ class LiveApi implements TraceApi {
 
   @override
   Future<DropContent> unlock(String dropId, LocationFix fix) async => DropContent.fromJson(
-        await _send('POST', '/v1/drops/$dropId/unlock', body: {'location': fix.toJson()}) as Map<String, dynamic>,
+        await _send('POST', '/v1/drops/$dropId/unlock', body: {'location': await _loc(fix)}) as Map<String, dynamic>,
       );
 
   @override
@@ -113,7 +128,7 @@ class LiveApi implements TraceApi {
       'mediaKey': ?mediaKey,
       'teaser': ?(teaser == null || teaser.isEmpty ? null : teaser),
       'isAnonymous': isAnonymous,
-      'location': fix.toJson(),
+      'location': await _loc(fix),
       if (conditions.isNotEmpty) ...{
         'conditions': {'all': [for (final c in conditions) c.toJson()]},
         'revealConditions': revealConditions,
@@ -129,7 +144,7 @@ class LiveApi implements TraceApi {
 
   @override
   Future<NearHint> nearHint(String dropId, LocationFix fix) async => NearHint.fromJson(
-        await _send('POST', '/v1/drops/$dropId/near-hint', body: {'location': fix.toJson()}) as Map<String, dynamic>,
+        await _send('POST', '/v1/drops/$dropId/near-hint', body: {'location': await _loc(fix)}) as Map<String, dynamic>,
       );
 
   @override
@@ -152,7 +167,7 @@ class LiveApi implements TraceApi {
 
   @override
   Future<Echo> postEcho(String dropId, String body, LocationFix fix) async {
-    final j = await _send('POST', '/v1/drops/$dropId/echoes', body: {'body': body, 'location': fix.toJson()})
+    final j = await _send('POST', '/v1/drops/$dropId/echoes', body: {'body': body, 'location': await _loc(fix)})
         as Map<String, dynamic>;
     return Echo(id: j['id'] as String, body: body, createdAt: DateTime.parse(j['createdAt'] as String), mine: true, pending: true);
   }
@@ -204,14 +219,14 @@ class LiveApi implements TraceApi {
 
   @override
   Future<DateTime> pickUpRelay(String dropId, LocationFix fix) async {
-    final j = await _send('POST', '/v1/relays/$dropId/pickup', body: {'location': fix.toJson()}) as Map<String, dynamic>;
+    final j = await _send('POST', '/v1/relays/$dropId/pickup', body: {'location': await _loc(fix)}) as Map<String, dynamic>;
     return DateTime.parse(j['deadlineAt'] as String);
   }
 
   @override
   Future<double> dropRelay(String dropId, LocationFix fix, {String? note}) async {
     final j = await _send('POST', '/v1/relays/$dropId/drop', body: {
-      'location': fix.toJson(),
+      'location': await _loc(fix),
       if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
     }) as Map<String, dynamic>;
     return (j['distanceM'] as num).toDouble();
@@ -228,6 +243,10 @@ class LiveApi implements TraceApi {
       RelayJourney.fromJson(await _send('GET', '/v1/relays/$dropId/journey') as Map<String, dynamic>);
 
   @override
+  Future<Venue> venue(String code) async =>
+      Venue.fromJson(await _send('GET', '/v1/venues/${Uri.encodeComponent(code)}') as Map<String, dynamic>);
+
+  @override
   Future<List<NowPhoto>> nowPhotos(String dropId) async {
     final j = await _send('GET', '/v1/drops/$dropId/now-photos') as Map<String, dynamic>;
     return [for (final p in j['photos'] as List) NowPhoto.fromJson(p as Map<String, dynamic>)];
@@ -238,7 +257,7 @@ class LiveApi implements TraceApi {
     final key = await _upload(jpeg);
     final j = await _send('POST', '/v1/drops/$dropId/now-photos', body: {
       'mediaKey': key,
-      'location': fix.toJson(),
+      'location': await _loc(fix),
       'heading': ?heading,
       'pitch': ?pitch,
     }) as Map<String, dynamic>;

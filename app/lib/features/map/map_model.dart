@@ -11,6 +11,9 @@ class MapModel extends ChangeNotifier {
 
   final TraceApi api;
 
+  /// Called after every successful refresh (home widget, nearby alerts).
+  void Function(List<NearbyDrop> drops, LatLng here)? onLoaded;
+
   List<NearbyDrop> drops = const [];
   bool loading = false;
   ApiError? error;
@@ -35,6 +38,7 @@ class MapModel extends ChangeNotifier {
     try {
       drops = await api.nearby(here.latitude, here.longitude);
       error = null;
+      onLoaded?.call(drops, here);
       if (selectedId != null && selected == null) selectedId = null;
     } on ApiError catch (e) {
       error = e;
