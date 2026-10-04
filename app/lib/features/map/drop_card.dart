@@ -16,6 +16,7 @@ import '../../ui/buttons.dart';
 import '../../ui/drop_glyph.dart';
 import '../../ui/glass.dart';
 import '../compass/hot_cold.dart';
+import '../trails/trail_page.dart';
 import 'drop_marker.dart';
 
 /// Bottom card for the selected drop: what it is, how far, and what you can do about it.
@@ -82,6 +83,18 @@ class DropCard extends StatelessWidget {
               if (drop.pending) const TagChip(label: 'In review', icon: Icons.schedule_rounded, color: TraceColors.amber),
               if (drop.unlocked) const TagChip(label: 'In your passport', icon: Icons.verified_rounded, color: TraceColors.mint),
               if (drop.forYou) const TagChip(label: 'For you', icon: Icons.favorite_rounded, color: TraceColors.rose),
+              if (drop.trail != null)
+                Pressable(
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => TrailPage(trailId: drop.trail!.id)),
+                  ),
+                  child: TagChip(
+                    label: '${drop.trail!.title} · stop ${drop.trail!.seq} of ${drop.trail!.total}',
+                    icon: Icons.route_rounded,
+                    color: TraceColors.sun,
+                  ),
+                ),
+              if (drop.circle != null) TagChip(label: drop.circle!.name, icon: Icons.group_rounded, color: TraceColors.iris),
               if (drop.capsuleUnlockAt != null)
                 TagChip(label: countdown(drop.capsuleUnlockAt!), icon: Icons.hourglass_top_rounded, color: TraceColors.sun),
               if (drop.hasCondition)

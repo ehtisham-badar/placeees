@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/api/api_error.dart';
 import '../../core/api/models.dart';
+import '../../core/api/social.dart';
 import '../../core/api/trace_api.dart';
 import '../../core/location/location_service.dart';
 import '../../core/theme/theme.dart';
@@ -38,10 +39,15 @@ class _ComposerPageState extends State<ComposerPage> {
   bool _done = false;
   final _rules = DropRules();
   String _tz = 'UTC';
+  List<Circle> _circles = const [];
+  String? _circleId;
 
   @override
   void initState() {
     super.initState();
+    context.read<TraceApi>().circles().then((c) {
+      if (mounted) setState(() => _circles = c);
+    }).catchError((_) {});
     FlutterTimezone.getLocalTimezone().then((tz) {
       if (mounted) setState(() => _tz = tz.identifier);
     }).catchError((_) {});
@@ -100,6 +106,7 @@ class _ComposerPageState extends State<ComposerPage> {
         revealConditions: _rules.reveal,
         unlockAt: _rules.capsuleAt,
         recipientHandles: _rules.recipients,
+        circleId: _rules.recipients.isEmpty ? _circleId : null,
       );
       HapticFeedback.heavyImpact();
       setState(() => _done = true);
@@ -182,6 +189,15 @@ class _ComposerPageState extends State<ComposerPage> {
                             style: Theme.of(context).textTheme.bodySmall?.copyWith(color: TraceColors.textFaint),
                           ),
                           const SizedBox(height: Space.lg),
+                          if (_circles.isNotEmpty) ...[
+                            _AudiencePicker(
+                              circles: _circles,
+                              selected: _rules.recipients.isEmpty ? _circleId : null,
+                              lockedToRecipients: _rules.recipients.isNotEmpty,
+                              onChanged: (id) => setState(() => _circleId = id),
+                            ),
+                            const SizedBox(height: Space.sm + 4),
+                          ],
                           WaitSection(rules: _rules, tz: _tz, onChanged: _rebuild),
                           const SizedBox(height: Space.sm + 4),
                           CapsuleSection(rules: _rules, onChanged: _rebuild),
@@ -214,6 +230,80 @@ class _ComposerPageState extends State<ComposerPage> {
                   ],
                 ),
               ),
+      ),
+    );
+  }
+}
+
+/// Everyone, or one of your circles (spec F-12).
+class _AudiencePicker extends StatelessWidget {
+  const _AudiencePicker({
+    required this.circles,
+    required this.selected,
+    required this.lockedToRecipients,
+    required this.onChanged,
+  });
+
+  final List<Circle> circles;
+  final String? selected;
+  final bool lockedToRecipients;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget chip(String? id, String label, IconData icon) {
+      final on = !lockedToRecipients && id == selected;
+      final color = id == null ? TraceColors.ember : TraceColors.iris;
+      return Pressable(
+        onTap: lockedToRecipients ? null : () => onChanged(id),
+        child: AnimatedContainer(
+          duration: Motion.fast,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          decoration: BoxDecoration(
+            color: on ? color.withValues(alpha: 0.15) : TraceColors.surfaceHigh,
+            borderRadius: BorderRadius.circular(100),
+            border: Border.all(color: on ? color.withValues(alpha: 0.6) : TraceColors.line),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 15, color: on ? color : TraceColors.textMuted),
+              const SizedBox(width: 6),
+              Text(label, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: on ? TraceColors.text : TraceColors.textMuted)),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(Space.md),
+      decoration: BoxDecoration(
+        color: TraceColors.surface,
+        borderRadius: BorderRadius.circular(Radii.md),
+        border: Border.all(color: TraceColors.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Who can find it', style: TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: Space.sm + 4),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              chip(null, 'Everyone', Icons.public_rounded),
+              for (final c in circles) chip(c.id, c.name, Icons.group_rounded),
+            ],
+          ),
+          if (lockedToRecipients) ...[
+            const SizedBox(height: Space.sm),
+            const Text(
+              'This capsule is addressed to specific people, so only they can find it.',
+              style: TextStyle(color: TraceColors.textFaint, fontSize: 12),
+            ),
+          ],
+        ],
       ),
     );
   }

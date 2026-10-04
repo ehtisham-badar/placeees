@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'api_error.dart';
 import 'conditions.dart';
 import 'models.dart';
+import 'social.dart';
 import 'trace_api.dart';
 
 class LiveApi implements TraceApi {
@@ -100,6 +101,7 @@ class LiveApi implements TraceApi {
     bool revealConditions = false,
     DateTime? unlockAt,
     List<String> recipientHandles = const [],
+    String? circleId,
   }) async {
     String? mediaKey;
     if (photoJpeg != null) {
@@ -122,6 +124,7 @@ class LiveApi implements TraceApi {
       },
       if (unlockAt != null) 'unlockAt': unlockAt.toUtc().toIso8601String(),
       if (recipientHandles.isNotEmpty) 'recipientHandles': recipientHandles,
+      'circleId': ?circleId,
     }) as Map<String, dynamic>;
     return j['id'] as String;
   }
@@ -136,8 +139,61 @@ class LiveApi implements TraceApi {
     final j = await _send('GET', '/v1/me/passport') as Map<String, dynamic>;
     List<PassportEntry> list(String key) =>
         (j[key] as List).map((e) => PassportEntry.fromJson(e as Map<String, dynamic>)).toList();
-    return Passport(unlocked: list('unlocked'), created: list('created'));
+    return Passport(
+      unlocked: list('unlocked'),
+      created: list('created'),
+      stamps: [for (final s in (j['stamps'] as List?) ?? const []) Stamp.fromJson(s as Map<String, dynamic>)],
+    );
   }
+
+  @override
+  Future<List<Echo>> echoes(String dropId) async {
+    final j = await _send('GET', '/v1/drops/$dropId/echoes') as Map<String, dynamic>;
+    return [for (final e in j['echoes'] as List) Echo.fromJson(e as Map<String, dynamic>)];
+  }
+
+  @override
+  Future<Echo> postEcho(String dropId, String body, LocationFix fix) async {
+    final j = await _send('POST', '/v1/drops/$dropId/echoes', body: {'body': body, 'location': fix.toJson()})
+        as Map<String, dynamic>;
+    return Echo(id: j['id'] as String, body: body, createdAt: DateTime.parse(j['createdAt'] as String), mine: true, pending: true);
+  }
+
+  @override
+  Future<String> createTrail(String title, List<({String dropId, String? clue})> stops) async {
+    final j = await _send('POST', '/v1/trails', body: {
+      'title': title,
+      'stops': [
+        for (final s in stops) {'dropId': s.dropId, if (s.clue != null && s.clue!.isNotEmpty) 'clue': s.clue},
+      ],
+    }) as Map<String, dynamic>;
+    return j['id'] as String;
+  }
+
+  @override
+  Future<Trail> trail(String trailId) async =>
+      Trail.fromJson(await _send('GET', '/v1/trails/$trailId') as Map<String, dynamic>);
+
+  @override
+  Future<List<Circle>> circles() async {
+    final j = await _send('GET', '/v1/circles') as Map<String, dynamic>;
+    return [for (final c in j['circles'] as List) Circle.fromJson(c as Map<String, dynamic>)];
+  }
+
+  @override
+  Future<Circle> createCircle(String name) async =>
+      Circle.fromJson(await _send('POST', '/v1/circles', body: {'name': name}) as Map<String, dynamic>);
+
+  @override
+  Future<Circle> joinCircle(String code) async =>
+      Circle.fromJson(await _send('POST', '/v1/circles/join', body: {'code': code}) as Map<String, dynamic>);
+
+  @override
+  Future<Circle> circle(String circleId) async =>
+      Circle.fromJson(await _send('GET', '/v1/circles/$circleId') as Map<String, dynamic>);
+
+  @override
+  Future<void> leaveCircle(String circleId) => _send('POST', '/v1/circles/$circleId/leave');
 
   @override
   Future<void> reportDrop(String dropId, {String? reason}) =>

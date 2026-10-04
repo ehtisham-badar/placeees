@@ -9,7 +9,7 @@ import { conditionsMet } from '../conditions/evaluate.js';
 import { conditionKinds, type Conditions } from '../conditions/schema.js';
 import { currentWeather } from '../conditions/weather.js';
 import { fuzzyCircle } from './fuzz.js';
-import { evaluateUnlock } from './unlock.js';
+import { evaluateUnlock, presenceFailure } from './unlock.js';
 
 export const MAX_CREATE_ACCURACY_M = 65;
 export const MAX_DROPS_PER_DAY = 10;
@@ -34,12 +34,15 @@ export interface CreateDropInput {
   revealConditions: boolean;
   unlockAt?: Date;
   recipientHandles?: string[];
+  circleId?: string;
 }
 
 /** Drops this user may see: approved (or their own), not blocked either way, not being carried. */
 const visibleTo = (userId: string) => sql`
   (d.status = 'approved' OR (d.creator_id = ${userId} AND d.status = 'pending_moderation'))
-  AND (d.visibility = 'public' OR d.creator_id = ${userId} OR ${userId} = ANY(d.recipient_ids))
+  AND (d.visibility = 'public' OR d.creator_id = ${userId} OR ${userId} = ANY(d.recipient_ids)
+       OR (d.visibility = 'circle' AND EXISTS (
+             SELECT 1 FROM circle_members cm WHERE cm.circle_id = d.circle_id AND cm.user_id = ${userId})))
   AND d.relay_carrier_id IS NULL
   AND NOT EXISTS (
     SELECT 1 FROM blocks b
@@ -47,7 +50,22 @@ const visibleTo = (userId: string) => sql`
        OR (b.blocker_id = d.creator_id AND b.blocked_id = ${userId})
   )`;
 
-async function assertCanPlaceAt(userId: string, p: LocationPayload, cell: string) {
+/**
+ * Trail stops after the first stay hidden (and locked) until the previous stop is unlocked (F-10).
+ * True for drops outside trails and for the trail's creator.
+ */
+export const trailOrderOk = (userId: string) => sql`
+  NOT EXISTS (
+    SELECT 1 FROM trail_stops ts
+    WHERE ts.drop_id = d.id AND ts.seq > 1 AND d.creator_id <> ${userId}
+      AND NOT EXISTS (
+        SELECT 1 FROM trail_stops prev
+        JOIN unlocks u ON u.drop_id = prev.drop_id AND u.user_id = ${userId}
+        WHERE prev.trail_id = ts.trail_id AND prev.seq = ts.seq - 1))`;
+
+export { visibleTo };
+
+async function assertCanPlaceAt(userId: string, p: LocationPayload, cell: string, isPublic: boolean) {
   const [counts] = await sql<{ today: number; inCell: number; inHome: boolean; inZone: boolean }[]>`
     SELECT
       (SELECT count(*)::int FROM drops WHERE creator_id = ${userId} AND created_at > now() - interval '1 day') AS today,
@@ -61,7 +79,7 @@ async function assertCanPlaceAt(userId: string, p: LocationPayload, cell: string
   if (counts.today >= MAX_DROPS_PER_DAY) throw new AppError('daily_limit', 429);
   if (counts.inCell >= MAX_DROPS_PER_CELL_PER_DAY) throw new AppError('place_limit', 429);
   if (counts.inHome) throw new AppError('home_zone', 422);
-  if (counts.inZone) throw new AppError('exclusion_zone', 422);
+  if (counts.inZone && isPublic) throw new AppError('exclusion_zone', 422);
 }
 
 async function assertTrustworthyFix(userId: string, p: LocationPayload) {
@@ -87,19 +105,26 @@ export async function createDrop(userId: string, input: CreateDropInput) {
     if (ahead > CAPSULE_MAX_MS) throw new AppError('capsule_too_far', 422);
   }
   const recipientIds = await resolveRecipients(userId, input.recipientHandles ?? []);
+  if (input.circleId) {
+    if (recipientIds.length) throw new AppError('visibility_conflict', 422);
+    const [member] = await sql`
+      SELECT 1 FROM circle_members WHERE circle_id = ${input.circleId} AND user_id = ${userId}`;
+    if (!member) throw new AppError('not_a_member', 403);
+  }
+  const visibility = input.circleId ? 'circle' : recipientIds.length ? 'users' : 'public';
 
   const cell = geohash(p, 7);
-  await assertCanPlaceAt(userId, p, cell);
+  await assertCanPlaceAt(userId, p, cell, visibility === 'public');
   await recordFix(userId, p);
 
   const [drop] = await sql<{ id: string; status: string; createdAt: Date }[]>`
     INSERT INTO drops (creator_id, geo, geohash7, type, body, media_key, teaser, is_anonymous,
-                       conditions, conditions_revealed, unlock_at, visibility, recipient_ids)
+                       conditions, conditions_revealed, unlock_at, visibility, recipient_ids, circle_id)
     VALUES (${userId}, ST_MakePoint(${p.lng}, ${p.lat})::geography, ${cell}, ${input.type},
             ${input.body?.trim() || null}, ${input.mediaKey ?? null}, ${input.teaser?.trim() || null},
             ${input.isAnonymous}, ${input.conditions ? sql.json(input.conditions) : null},
             ${input.conditions ? input.revealConditions : false}, ${input.unlockAt ?? null},
-            ${recipientIds.length ? 'users' : 'public'}, ${recipientIds.length ? recipientIds : null})
+            ${visibility}, ${recipientIds.length ? recipientIds : null}, ${input.circleId ?? null})
     RETURNING id, status, created_at`;
   if (!drop) throw new AppError('internal', 500);
 
@@ -147,6 +172,12 @@ interface NearbyRow {
   mine: boolean;
   unlocked: boolean;
   forMe: boolean;
+  trailId: string | null;
+  trailTitle: string | null;
+  trailSeq: number | null;
+  trailTotal: number | null;
+  circleId: string | null;
+  circleName: string | null;
 }
 
 export async function nearbyDrops(userId: string, lat: number, lng: number, radius: number) {
@@ -156,9 +187,16 @@ export async function nearbyDrops(userId: string, lat: number, lng: number, radi
            d.conditions, d.conditions_revealed, d.unlock_at, d.is_relay,
            d.creator_id = ${userId} AS mine,
            ${userId} = ANY(COALESCE(d.recipient_ids, '{}')) AS for_me,
-           EXISTS (SELECT 1 FROM unlocks u WHERE u.drop_id = d.id AND u.user_id = ${userId}) AS unlocked
+           EXISTS (SELECT 1 FROM unlocks u WHERE u.drop_id = d.id AND u.user_id = ${userId}) AS unlocked,
+           t.id AS trail_id, t.title AS trail_title, ts.seq AS trail_seq,
+           (SELECT count(*)::int FROM trail_stops x WHERE x.trail_id = t.id) AS trail_total,
+           c.id AS circle_id, c.name AS circle_name
     FROM drops d
+    LEFT JOIN trail_stops ts ON ts.drop_id = d.id
+    LEFT JOIN trails t ON t.id = ts.trail_id
+    LEFT JOIN circles c ON c.id = d.circle_id
     WHERE ${visibleTo(userId)}
+      AND ${trailOrderOk(userId)}
       AND ST_DWithin(d.geo, ST_MakePoint(${lng}, ${lat})::geography, ${radius})
       AND (d.expires_after IS NULL
            OR (SELECT count(*) FROM unlocks u WHERE u.drop_id = d.id) < d.expires_after)
@@ -180,6 +218,8 @@ export async function nearbyDrops(userId: string, lat: number, lng: number, radi
       capsuleUnlockAt: r.unlockAt,
       forYou: r.forMe,
       relay: r.isRelay,
+      trail: r.trailId ? { id: r.trailId, title: r.trailTitle, seq: r.trailSeq, total: r.trailTotal } : null,
+      circle: r.circleId ? { id: r.circleId, name: r.circleName } : null,
     },
     mine: r.mine,
     unlocked: r.unlocked,
@@ -200,6 +240,14 @@ interface DropRow {
   handle: string | null;
   unlockCount: number;
   unlockedAt: Date | null;
+  trailId: string | null;
+  trailTitle: string | null;
+  trailSeq: number | null;
+  trailTotal: number | null;
+  nextClue: string | null;
+  trailCompletedAt: Date | null;
+  circleId: string | null;
+  circleName: string | null;
 }
 
 async function loadDrop(userId: string, dropId: string): Promise<DropRow | undefined> {
@@ -207,8 +255,18 @@ async function loadDrop(userId: string, dropId: string): Promise<DropRow | undef
     SELECT d.id, d.creator_id, d.type, d.body, d.media_key, d.teaser, d.is_anonymous, d.created_at,
            d.status, u.handle,
            (SELECT count(*)::int FROM unlocks x WHERE x.drop_id = d.id) AS unlock_count,
-           (SELECT unlocked_at FROM unlocks x WHERE x.drop_id = d.id AND x.user_id = ${userId}) AS unlocked_at
-    FROM drops d JOIN users u ON u.id = d.creator_id
+           (SELECT unlocked_at FROM unlocks x WHERE x.drop_id = d.id AND x.user_id = ${userId}) AS unlocked_at,
+           t.id AS trail_id, t.title AS trail_title, ts.seq AS trail_seq,
+           (SELECT count(*)::int FROM trail_stops x WHERE x.trail_id = t.id) AS trail_total,
+           (SELECT clue FROM trail_stops x WHERE x.trail_id = t.id AND x.seq = ts.seq + 1) AS next_clue,
+           (SELECT completed_at FROM trail_completions x WHERE x.trail_id = t.id AND x.user_id = ${userId})
+             AS trail_completed_at,
+           c.id AS circle_id, c.name AS circle_name
+    FROM drops d
+    JOIN users u ON u.id = d.creator_id
+    LEFT JOIN trail_stops ts ON ts.drop_id = d.id
+    LEFT JOIN trails t ON t.id = ts.trail_id
+    LEFT JOIN circles c ON c.id = d.circle_id
     WHERE d.id = ${dropId}`;
   return row;
 }
@@ -228,6 +286,18 @@ export async function serializeContent(row: DropRow, userId: string) {
     unlockCount: row.unlockCount,
     mine,
     status: row.status,
+    // The next clue is only for people who have actually reached this stop.
+    trail: row.trailId
+      ? {
+          id: row.trailId,
+          title: row.trailTitle,
+          seq: row.trailSeq,
+          total: row.trailTotal,
+          nextClue: row.nextClue,
+          completedAt: row.trailCompletedAt,
+        }
+      : null,
+    circle: row.circleId ? { id: row.circleId, name: row.circleName } : null,
   };
 }
 
@@ -246,6 +316,7 @@ export async function unlockDrop(userId: string, dropId: string, p: LocationPayl
     previousFix: await previousFix(userId),
     distanceM: drop.distanceM,
     visible: drop.visible,
+    trailOrderOk: drop.trailOrderOk,
     unlockAt: drop.unlockAt,
     conditionsMet: async () =>
       !drop.conditions ||
@@ -262,11 +333,26 @@ export async function unlockDrop(userId: string, dropId: string, p: LocationPayl
   await sql`
     INSERT INTO unlocks (user_id, drop_id, accuracy) VALUES (${userId}, ${dropId}, ${p.accuracy})
     ON CONFLICT DO NOTHING`;
+  await recordTrailCompletion(userId, dropId);
   return getDropContent(userId, dropId);
+}
+
+/** Awards the trail stamp (F-10) once every stop of the drop's trail is unlocked. */
+async function recordTrailCompletion(userId: string, dropId: string) {
+  await sql`
+    INSERT INTO trail_completions (user_id, trail_id)
+    SELECT ${userId}, ts.trail_id FROM trail_stops ts
+    WHERE ts.drop_id = ${dropId}
+      AND NOT EXISTS (
+        SELECT 1 FROM trail_stops s
+        WHERE s.trail_id = ts.trail_id
+          AND NOT EXISTS (SELECT 1 FROM unlocks u WHERE u.drop_id = s.drop_id AND u.user_id = ${userId}))
+    ON CONFLICT DO NOTHING`;
 }
 
 interface LocatedDrop {
   visible: boolean;
+  trailOrderOk: boolean;
   distanceM: number;
   lat: number;
   lng: number;
@@ -277,6 +363,7 @@ interface LocatedDrop {
 async function locateDrop(userId: string, dropId: string, p: LocationPayload): Promise<LocatedDrop> {
   const [drop] = await sql<LocatedDrop[]>`
     SELECT (${visibleTo(userId)} AND d.status = 'approved') AS visible,
+           ${trailOrderOk(userId)} AS trail_order_ok,
            ST_Distance(d.geo, ST_MakePoint(${p.lng}, ${p.lat})::geography) AS distance_m,
            ST_Y(d.geo::geometry) AS lat, ST_X(d.geo::geometry) AS lng,
            d.conditions, d.unlock_at
@@ -296,6 +383,7 @@ export async function nearHint(userId: string, dropId: string, p: LocationPayloa
   if (isImpossibleTravel(await previousFix(userId), p)) throw new AppError('suspicious', 422);
 
   const drop = await locateDrop(userId, dropId, p);
+  if (!drop.trailOrderOk) throw notFound(); // hidden trail stops stay hidden
   if (drop.distanceM > NEAR_HINT_RADIUS_M) throw new AppError('too_far', 422);
   await recordFix(userId, p);
   return {
@@ -303,4 +391,12 @@ export async function nearHint(userId: string, dropId: string, p: LocationPayloa
     distanceM: Math.round(distanceM(p, drop)),
     expiresAt: new Date(Date.now() + NEAR_HINT_TTL_MS),
   };
+}
+
+/** Proximity check for location-bound actions on a drop other than unlocking it (echoes). */
+export async function assertPresentAt(userId: string, dropId: string, p: LocationPayload) {
+  const drop = await locateDrop(userId, dropId, p);
+  const failure = presenceFailure({ payload: p, previousFix: await previousFix(userId), distanceM: drop.distanceM });
+  if (failure) throw new AppError(failure, 422);
+  await recordFix(userId, p);
 }

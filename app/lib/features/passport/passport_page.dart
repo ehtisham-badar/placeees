@@ -11,6 +11,10 @@ import '../../core/theme/tokens.dart';
 import '../../ui/buttons.dart';
 import '../../ui/drop_glyph.dart';
 import '../../ui/pulse_rings.dart';
+import '../circles/circles_page.dart';
+import '../trails/stamp.dart';
+import '../trails/trail_builder_page.dart';
+import '../trails/trail_page.dart';
 import '../unlock/drop_detail_page.dart';
 
 /// Private record of everything you've found and left. Never visible to anyone else.
@@ -92,6 +96,12 @@ class _PassportPageState extends State<PassportPage> {
                     children: [
                       OrbButton(icon: Icons.arrow_back_rounded, onTap: () => Navigator.pop(context), tooltip: 'Back'),
                       const Spacer(),
+                      OrbButton(
+                        icon: Icons.group_rounded,
+                        tooltip: 'Circles',
+                        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CirclesPage())),
+                      ),
+                      const SizedBox(width: Space.sm),
                       OrbButton(icon: Icons.tune_rounded, onTap: _settings, tooltip: 'Settings'),
                     ],
                   ),
@@ -120,8 +130,49 @@ class _PassportPageState extends State<PassportPage> {
                         _Stat(value: p?.peopleReached, label: 'Reached', color: TraceColors.sun),
                       ],
                     ),
+                    if (p != null && p.stamps.isNotEmpty) ...[
+                      const SizedBox(height: Space.lg),
+                      const Text(
+                        'STAMPS',
+                        style: TextStyle(color: TraceColors.textFaint, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1.2),
+                      ),
+                      const SizedBox(height: Space.sm),
+                      SizedBox(
+                        height: 128,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: p.stamps.length,
+                          separatorBuilder: (_, _) => const SizedBox(width: Space.md),
+                          itemBuilder: (_, i) => Pressable(
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => TrailPage(trailId: p.stamps[i].trailId)),
+                            ),
+                            child: TrailStamp(
+                              title: p.stamps[i].title,
+                              date: p.stamps[i].completedAt,
+                              size: 116,
+                              tilt: i.isEven ? -0.12 : 0.08,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: Space.lg),
                     _Tabs(index: _tab, onChanged: (i) => setState(() => _tab = i)),
+                    if (_tab == 1 && p != null && p.created.where((e) => !e.rejected).length >= 3) ...[
+                      const SizedBox(height: Space.md),
+                      GhostButton(
+                        label: 'Make a trail from your drops',
+                        icon: Icons.route_rounded,
+                        color: TraceColors.sun,
+                        onPressed: () async {
+                          final made = await Navigator.of(context).push<bool>(
+                            MaterialPageRoute(builder: (_) => TrailBuilderPage(drops: p.created)),
+                          );
+                          if (made == true) _load();
+                        },
+                      ),
+                    ],
                     const SizedBox(height: Space.md),
                   ],
                 ),

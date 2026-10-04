@@ -2,12 +2,13 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
-import 'package:latlong2/latlong.dart';
+import 'package:latlong2/latlong.dart' show LatLng;
 
 import 'api_error.dart';
 import 'conditions.dart';
 import 'geo.dart';
 import 'models.dart';
+import 'social.dart';
 import 'sun.dart';
 import 'trace_api.dart';
 
@@ -20,6 +21,10 @@ class DemoApi implements TraceApi {
   User _user = const User(id: 'demo-user', handle: null, hasHomeZone: false);
   final _drops = <String, _DemoDrop>{};
   final _unlockedAt = <String, DateTime>{};
+  final _trails = <String, _DemoTrail>{};
+  final _completedAt = <String, DateTime>{};
+  final _circles = <String, _DemoCircle>{};
+  final _echoes = <String, List<Echo>>{};
   final _rng = math.Random();
   int _seq = 0;
 
@@ -66,9 +71,51 @@ class DemoApi implements TraceApi {
     final here = LatLng(lat, lng);
     return [
       for (final d in _drops.values)
-        if (metersBetween(here, d.point) < 2000 && (!d.pending || d.mine)) d.toNearby(_unlockedAt.containsKey(d.id)),
+        if (metersBetween(here, d.point) < 2000 && (!d.pending || d.mine) && _visible(d) && _trailOrderOk(d))
+          d.toNearby(_unlockedAt.containsKey(d.id), trail: _trailRef(d, content: false), circle: _circleRef(d)),
     ];
   }
+
+  bool _visible(_DemoDrop d) => d.mine || d.circleId == null || (_circles[d.circleId]?.joined ?? false);
+
+  (_DemoTrail, int)? _trailOf(String dropId) {
+    for (final t in _trails.values) {
+      final i = t.dropIds.indexOf(dropId);
+      if (i >= 0) return (t, i);
+    }
+    return null;
+  }
+
+  /// Same rule as the API: later stops stay hidden until the previous one is unlocked.
+  bool _trailOrderOk(_DemoDrop d) {
+    final found = _trailOf(d.id);
+    if (found == null || d.mine) return true;
+    final (t, i) = found;
+    return i == 0 || _unlockedAt.containsKey(t.dropIds[i - 1]);
+  }
+
+  TrailRef? _trailRef(_DemoDrop d, {required bool content}) {
+    final found = _trailOf(d.id);
+    if (found == null) return null;
+    final (t, i) = found;
+    final reachedNext = content && (d.mine || _unlockedAt.containsKey(d.id));
+    return TrailRef(
+      id: t.id,
+      title: t.title,
+      seq: i + 1,
+      total: t.dropIds.length,
+      nextClue: reachedNext && i + 1 < t.clues.length ? t.clues[i + 1] : null,
+      completedAt: _completedAt[t.id],
+    );
+  }
+
+  CircleRef? _circleRef(_DemoDrop d) {
+    final c = d.circleId == null ? null : _circles[d.circleId];
+    return c == null ? null : CircleRef(id: c.id, name: c.name);
+  }
+
+  DropContent _content(_DemoDrop d) =>
+      d.toContent(_unlockedAt[d.id], trail: _trailRef(d, content: true), circle: _circleRef(d));
 
   @override
   Future<DropContent> unlock(String dropId, LocationFix fix) async {
@@ -76,6 +123,8 @@ class DemoApi implements TraceApi {
     final d = _drops[dropId] ?? (throw const ApiError('not_found'));
     if (fix.accuracy > 80) throw const ApiError('low_accuracy');
     if (metersBetween(fix.point, d.point) > unlockRadius(fix.accuracy)) throw const ApiError('too_far');
+    if (!_visible(d)) throw const ApiError('not_found');
+    if (!_trailOrderOk(d)) throw const ApiError('trail_order');
     if (d.capsuleUnlockAt != null && DateTime.now().isBefore(d.capsuleUnlockAt!)) {
       throw const ApiError('capsule_locked');
     }
@@ -84,7 +133,9 @@ class DemoApi implements TraceApi {
       _unlockedAt[d.id] = DateTime.now();
       d.unlockCount++;
     }
-    return d.toContent(_unlockedAt[d.id]);
+    final trail = _trailOf(d.id)?.$1;
+    if (trail != null && trail.dropIds.every(_unlockedAt.containsKey)) _completedAt.putIfAbsent(trail.id, DateTime.now);
+    return _content(d);
   }
 
   @override
@@ -92,7 +143,7 @@ class DemoApi implements TraceApi {
     await _latency(200);
     final d = _drops[dropId] ?? (throw const ApiError('not_found'));
     if (!d.mine && !_unlockedAt.containsKey(d.id)) throw const ApiError('locked');
-    return d.toContent(_unlockedAt[d.id]);
+    return _content(d);
   }
 
   @override
@@ -107,8 +158,11 @@ class DemoApi implements TraceApi {
     bool revealConditions = false,
     DateTime? unlockAt,
     List<String> recipientHandles = const [],
+    String? circleId,
   }) async {
     await _latency(900);
+    if (circleId != null && recipientHandles.isNotEmpty) throw const ApiError('visibility_conflict');
+    if (circleId != null && !(_circles[circleId]?.joined ?? false)) throw const ApiError('not_a_member');
     if (fix.accuracy > 65) throw const ApiError('low_accuracy');
     if (unlockAt != null) {
       final ahead = unlockAt.difference(DateTime.now());
@@ -133,6 +187,7 @@ class DemoApi implements TraceApi {
       conditions: conditions.isEmpty ? null : conditions,
       revealed: revealConditions,
       capsuleUnlockAt: unlockAt,
+      circleId: circleId,
     );
     _drops[d.id] = d;
     // Simulated moderation pass.
@@ -188,7 +243,144 @@ class DemoApi implements TraceApi {
       ..sort((a, b) => b.unlockedAt!.compareTo(a.unlockedAt!));
     final created = _drops.values.where((d) => d.mine).map((d) => d.toPassport()).toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    return Passport(unlocked: unlocked, created: created);
+    final stamps = [
+      for (final e in _completedAt.entries)
+        Stamp(trailId: e.key, title: _trails[e.key]!.title, completedAt: e.value, stops: _trails[e.key]!.dropIds.length),
+    ];
+    return Passport(unlocked: unlocked, created: created, stamps: stamps);
+  }
+
+  @override
+  Future<List<Echo>> echoes(String dropId) async {
+    await _latency(250);
+    final d = _drops[dropId] ?? (throw const ApiError('not_found'));
+    if (!d.mine && !_unlockedAt.containsKey(dropId)) throw const ApiError('locked');
+    return List.of(_echoes[dropId] ?? const []);
+  }
+
+  @override
+  Future<Echo> postEcho(String dropId, String body, LocationFix fix) async {
+    await _latency(500);
+    final d = _drops[dropId] ?? (throw const ApiError('not_found'));
+    if (!d.mine && !_unlockedAt.containsKey(dropId)) throw const ApiError('locked');
+    if (fix.accuracy > 80) throw const ApiError('low_accuracy');
+    if (metersBetween(fix.point, d.point) > unlockRadius(fix.accuracy)) throw const ApiError('too_far');
+    final echo = Echo(
+      id: 'echo-${_seq++}',
+      body: body.trim(),
+      createdAt: DateTime.now(),
+      authorHandle: _user.handle,
+      mine: true,
+      pending: true,
+    );
+    final list = _echoes.putIfAbsent(dropId, () => []);
+    list.add(echo);
+    // Simulated moderation pass.
+    Timer(const Duration(seconds: 3), () {
+      final i = list.indexOf(echo);
+      if (i >= 0) {
+        list[i] = Echo(id: echo.id, body: echo.body, createdAt: echo.createdAt, authorHandle: echo.authorHandle, mine: true);
+      }
+    });
+    return echo;
+  }
+
+  @override
+  Future<String> createTrail(String title, List<({String dropId, String? clue})> stops) async {
+    await _latency(600);
+    final ids = [for (final s in stops) s.dropId];
+    if (ids.length < 3 || ids.length > 15) throw const ApiError('invalid_stops');
+    if (ids.toSet().length != ids.length) throw const ApiError('duplicate_stop');
+    for (final id in ids) {
+      final d = _drops[id];
+      if (d == null || !d.mine || d.circleId != null || _trailOf(id) != null) throw const ApiError('invalid_stops');
+    }
+    final t = _DemoTrail(id: 'trail-${_seq++}', title: title.trim(), author: _user.handle, dropIds: ids, clues: [
+      for (final s in stops) (s.clue?.trim().isEmpty ?? true) ? null : s.clue!.trim(),
+    ]);
+    _trails[t.id] = t;
+    return t.id;
+  }
+
+  @override
+  Future<Trail> trail(String trailId) async {
+    await _latency(300);
+    final t = _trails[trailId] ?? (throw const ApiError('not_found'));
+    final mine = t.author == _user.handle;
+    return Trail(
+      id: t.id,
+      title: t.title,
+      creatorHandle: t.author,
+      mine: mine,
+      completedAt: _completedAt[t.id],
+      stops: [
+        for (final (i, id) in t.dropIds.indexed)
+          () {
+            final d = _drops[id]!;
+            final unlocked = _unlockedAt.containsKey(id);
+            final reached = mine || i == 0 || _unlockedAt.containsKey(t.dropIds[i - 1]);
+            return TrailStop(
+              seq: i + 1,
+              unlocked: unlocked,
+              reached: reached,
+              clue: reached ? t.clues[i] : null,
+              dropId: reached ? id : null,
+              type: mine || unlocked ? d.type : null,
+              teaser: mine || unlocked ? d.teaser : null,
+              areaCenter: reached && !unlocked ? fuzzyCircle(id, d.point).center : null,
+            );
+          }(),
+      ],
+    );
+  }
+
+  @override
+  Future<List<Circle>> circles() async {
+    await _latency(250);
+    return [for (final c in _circles.values) if (c.joined) c.toCircle(_user.handle)];
+  }
+
+  @override
+  Future<Circle> createCircle(String name) async {
+    await _latency(500);
+    if (_circles.values.where((c) => c.owner == _user.handle).length >= 10) throw const ApiError('circle_limit');
+    const alphabet = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+    final code = String.fromCharCodes([for (var i = 0; i < 8; i++) alphabet.codeUnitAt(_rng.nextInt(alphabet.length))]);
+    final c = _DemoCircle(id: 'circle-${_seq++}', name: name.trim(), code: code, owner: _user.handle ?? 'you', members: [
+      _user.handle ?? 'you',
+    ])..joined = true;
+    _circles[c.id] = c;
+    return c.toCircle(_user.handle);
+  }
+
+  @override
+  Future<Circle> joinCircle(String code) async {
+    await _latency(500);
+    final normalized = code.toUpperCase().replaceAll(RegExp('[^A-Z0-9]'), '');
+    final c = _circles.values.where((c) => c.code == normalized).firstOrNull ?? (throw const ApiError('invalid_code'));
+    if (!c.joined) {
+      if (c.members.length >= 50) throw const ApiError('circle_full');
+      c.joined = true;
+      c.members.add(_user.handle ?? 'you');
+    }
+    return c.toCircle(_user.handle);
+  }
+
+  @override
+  Future<Circle> circle(String circleId) async {
+    await _latency(250);
+    final c = _circles[circleId];
+    if (c == null || !c.joined) throw const ApiError('not_found');
+    return c.toCircle(_user.handle);
+  }
+
+  @override
+  Future<void> leaveCircle(String circleId) async {
+    await _latency(300);
+    final c = _circles[circleId] ?? (throw const ApiError('not_found'));
+    if (c.owner == _user.handle) throw const ApiError('owner_cannot_leave');
+    c.joined = false;
+    c.members.remove(_user.handle);
   }
 
   @override
@@ -203,6 +395,7 @@ class DemoApi implements TraceApi {
 
   void _seed(LatLng here) {
     final now = DateTime.now();
+    _seedSocial(here, now);
     for (final (i, s) in _seeds.indexed) {
       final d = _DemoDrop(
         id: 'seed-$i',
@@ -224,6 +417,108 @@ class DemoApi implements TraceApi {
   }
 }
 
+extension on DemoApi {
+  void _seedSocial(LatLng here, DateTime now) {
+    _DemoDrop add(String id, double bearing, double meters, String teaser, String body,
+            {String? author, String? circleId, int unlocks = 0, Duration age = const Duration(days: 5)}) =>
+        _drops[id] = _DemoDrop(
+          id: id,
+          type: DropType.text,
+          point: offsetBy(here, bearing, meters),
+          teaser: teaser,
+          body: body,
+          author: author,
+          createdAt: now.subtract(age),
+          unlockCount: unlocks,
+          circleId: circleId,
+        );
+
+    // A three-stop trail starting right next to you.
+    add('trail-a', 60, 22, 'The hunt starts here.',
+        'Welcome to the Old City Hunt. Three stops, one story. Read the clue below, then follow it.',
+        author: 'noor', unlocks: 31);
+    add('trail-b', 150, 190, 'Stop two.',
+        'The gate has stood here for four hundred years. Touch the wood. Somebody’s great-great-grandfather did too.',
+        author: 'noor', unlocks: 18);
+    add('trail-c', 230, 340, 'The last stop.',
+        'You made it. The best view in the old city is right behind you. Turn around.',
+        author: 'noor', unlocks: 11);
+    _trails['trail-old-city'] = _DemoTrail(
+      id: 'trail-old-city',
+      title: 'Old City Hunt',
+      author: 'noor',
+      dropIds: const ['trail-a', 'trail-b', 'trail-c'],
+      clues: const [
+        'Begin where the fountain used to be.',
+        'Walk toward the oldest door you can find. It’s green and it creaks.',
+        'Climb until you can see the minaret over the rooftops.',
+      ],
+    );
+
+    // A circle you belong to, with a drop only its members can see.
+    _circles['circle-hostel'] = _DemoCircle(
+      id: 'circle-hostel',
+      name: 'Hostel 4 crew',
+      code: 'H7K2M9QX',
+      owner: 'bilal',
+      members: ['bilal', 'noor', 'zara', _user.handle ?? 'you'],
+    )..joined = true;
+    add('circle-a', 330, 120, 'Movie night spot. Members only.',
+        'Friday, 9pm, bring a blanket. The projector lives in Bilal’s room.',
+        author: 'bilal', circleId: 'circle-hostel', unlocks: 3, age: const Duration(days: 2));
+
+    // A circle you can join with a code.
+    _circles['circle-walkers'] = _DemoCircle(
+      id: 'circle-walkers',
+      name: 'Saturday walkers',
+      code: 'WANDER29',
+      owner: 'zara',
+      members: ['zara', 'umar_and_aiza', 'hamza.shoots'],
+    );
+
+    _echoes['seed-0'] = [
+      Echo(id: 'e1', body: 'Needed this today. Thank you, stranger.', createdAt: now.subtract(const Duration(days: 2)), authorHandle: 'faris'),
+      Echo(id: 'e2', body: 'Sat here for ten minutes. The pigeons are indeed friendly.', createdAt: now.subtract(const Duration(hours: 30)), authorHandle: 'mehak'),
+      Echo(id: 'e3', body: 'Came back a week later to read it again.', createdAt: now.subtract(const Duration(hours: 4)), authorHandle: 'faris'),
+    ];
+    _echoes['trail-a'] = [
+      Echo(id: 'e4', body: 'Did the whole hunt with my little brother. He found stop two first.', createdAt: now.subtract(const Duration(days: 1)), authorHandle: 'ayesha'),
+    ];
+  }
+}
+
+class _DemoTrail {
+  _DemoTrail({required this.id, required this.title, required this.author, required this.dropIds, required this.clues});
+
+  final String id;
+  final String title;
+  final String? author;
+  final List<String> dropIds;
+
+  /// clues[i] leads to stop i; revealed once stop i-1 is unlocked.
+  final List<String?> clues;
+}
+
+class _DemoCircle {
+  _DemoCircle({required this.id, required this.name, required this.code, required this.owner, required this.members});
+
+  final String id;
+  final String name;
+  final String code;
+  final String owner;
+  final List<String> members;
+  bool joined = false;
+
+  Circle toCircle(String? me) => Circle(
+        id: id,
+        name: name,
+        inviteCode: code,
+        memberCount: members.length,
+        isOwner: owner == me,
+        members: [for (final m in members) CircleMember(handle: m, isOwner: m == owner)],
+      );
+}
+
 class _DemoDrop {
   _DemoDrop({
     required this.id,
@@ -242,6 +537,7 @@ class _DemoDrop {
     this.revealed = false,
     this.forYou = false,
     this.capsuleUnlockAt,
+    this.circleId,
   });
 
   final String id;
@@ -258,10 +554,11 @@ class _DemoDrop {
   final bool revealed;
   final bool forYou;
   final DateTime? capsuleUnlockAt;
+  final String? circleId;
   int unlockCount;
   bool pending;
 
-  NearbyDrop toNearby(bool unlocked) {
+  NearbyDrop toNearby(bool unlocked, {TrailRef? trail, CircleRef? circle}) {
     final fuzz = fuzzyCircle(id, point);
     return NearbyDrop(
       id: id,
@@ -287,10 +584,12 @@ class _DemoDrop {
       conditions: revealed || mine ? conditions : null,
       capsuleUnlockAt: capsuleUnlockAt,
       forYou: forYou,
+      trail: trail,
+      circle: circle,
     );
   }
 
-  DropContent toContent(DateTime? unlockedAt) => DropContent(
+  DropContent toContent(DateTime? unlockedAt, {TrailRef? trail, CircleRef? circle}) => DropContent(
         id: id,
         type: type,
         body: body,
@@ -303,6 +602,8 @@ class _DemoDrop {
         unlockCount: unlockCount,
         mine: mine,
         pending: pending,
+        trail: trail,
+        circle: circle,
       );
 
   PassportEntry toPassport({DateTime? unlockedAt}) => PassportEntry(

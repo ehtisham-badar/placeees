@@ -546,9 +546,9 @@ trace-api/
 - [x] F-09 Time capsules + scheduled push (server side; app push registration pending)
 
 ### Week 6–7 — Social layer
-- [ ] F-10 Trails + Live Activity
-- [ ] F-11 Echoes
-- [ ] F-12 Circles
+- [x] F-10 Trails (Live Activity pending, ships with F-15)
+- [x] F-11 Echoes
+- [x] F-12 Circles
 
 ### Week 8–9 — Signature features
 - [ ] F-13 Relay drops + journey view
@@ -621,3 +621,9 @@ trace-api/
 | 2026-10-04 | Unknown weather (provider down) never satisfies a weather rule | Fail closed: a drop never opens on a guess |
 | 2026-10-04 | Capsule checks run before condition checks on unlock | A sealed capsule never triggers a weather lookup |
 | 2026-10-04 | Compass haptics use platform impact levels (light/medium/heavy) | Flutter has no Core Haptics intensity curve; three levels read clearly |
+| 2026-10-05 | Trail clue on stop N leads to stop N; stop 1's clue shows from the start | One clue per stop, revealed in order |
+| 2026-10-05 | Trail stops must be the creator's own public drops, each in at most one trail | Keeps visibility simple; circle trails can come later |
+| 2026-10-05 | Echoes require an unlock **and** the F-04 presence check | Replies stay as rare and place-bound as the drops |
+| 2026-10-05 | Circle owners can't leave; no kick/delete in the MVP | Smallest safe surface; revisit after the pilot |
+| 2026-10-05 | School exclusion zones apply to public drops only; home zone applies to all | Matches §5 F-02 wording |
+| 2026-10-05 | A drop goes to a circle or to named recipients, never both | Avoids ambiguous visibility |

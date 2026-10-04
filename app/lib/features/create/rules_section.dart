@@ -127,6 +127,7 @@ class WaitSection extends StatelessWidget {
           Row(
             children: [
               _PickerPill(
+                icon: Icons.date_range_rounded,
                 label: r.dates == null
                     ? 'Pick a date range'
                     : '${DateFormat.MMMd().format(r.dates!.start)} – ${DateFormat.MMMd().format(r.dates!.end)}',

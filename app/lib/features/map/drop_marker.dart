@@ -17,6 +17,7 @@ IconData conditionIcon(String? kind) => switch (kind) {
 Color dropColor(NearbyDrop d) {
   if (d.pending) return TraceColors.textMuted;
   if (d.unlocked || d.mine) return TraceColors.mint;
+  if (d.circle != null) return TraceColors.iris;
   return TraceColors.ember;
 }
 
@@ -52,7 +53,11 @@ class _DropMarkerState extends State<DropMarker> with SingleTickerProviderStateM
             ? conditionIcon(d.conditionKinds.firstOrNull)
             : d.pending
                 ? Icons.schedule_rounded
-                : null;
+                : d.trail != null
+                    ? Icons.route_rounded
+                    : d.circle != null
+                        ? Icons.group_rounded
+                        : null;
 
     final orb = AnimatedBuilder(
       animation: _breath,

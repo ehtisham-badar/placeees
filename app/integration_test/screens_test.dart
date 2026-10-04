@@ -55,9 +55,50 @@ void main() {
     await tester.tap(orb('Stop hunting'));
     await settle(tester);
 
-    // The composer with a rule chosen.
+    // Trail stop 1: unlock it, see the next clue and the echoes.
     await tester.tap(orb('Close'));
     await settle(tester);
+    await tester.tap(marker('The hunt starts here.'), warnIfMissed: false);
+    await settle(tester);
+    await binding.takeScreenshot('06-card-trail');
+    await tester.tap(find.text('Demo: walk there'));
+    await settle(tester);
+    await tester.tap(find.text('Try to unlock'));
+    await settle(tester, const Duration(seconds: 5));
+    await binding.takeScreenshot('07-detail-trail');
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -900));
+    await settle(tester);
+    await binding.takeScreenshot('08-detail-echoes');
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, 900));
+    await settle(tester);
+    await tester.tap(find.text('View trail'));
+    await settle(tester, const Duration(seconds: 3));
+    await binding.takeScreenshot('09-trail');
+    await tester.tap(orb('Back'));
+    await settle(tester);
+    await tester.tap(orb('Back'));
+    await settle(tester);
+
+    // Passport → circles. The drop card hides the dock, so close it first.
+    await tester.tap(orb('Close'));
+    await settle(tester);
+    await tester.tap(orb('Passport'));
+    await settle(tester, const Duration(seconds: 3));
+    await binding.takeScreenshot('10-passport');
+    await tester.tap(orb('Circles'));
+    await settle(tester, const Duration(seconds: 3));
+    await binding.takeScreenshot('11-circles');
+    await tester.tap(find.text('Hostel 4 crew'));
+    await settle(tester, const Duration(seconds: 3));
+    await binding.takeScreenshot('12-circle-detail');
+    await tester.tap(orb('Back'));
+    await settle(tester);
+    await tester.tap(orb('Back'));
+    await settle(tester);
+    await tester.tap(orb('Back'));
+    await settle(tester);
+
+    // The composer with a rule chosen.
     await tester.tap(find.text('Leave a drop here'));
     await settle(tester);
     await tester.drag(find.byType(Scrollable).first, const Offset(0, -500));

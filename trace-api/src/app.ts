@@ -1,10 +1,13 @@
 import Fastify from 'fastify';
 import { ZodError } from 'zod';
 import { authRoutes } from './auth/routes.js';
+import { circleRoutes } from './circles/routes.js';
 import { dropRoutes } from './drops/routes.js';
+import { echoRoutes } from './echoes/routes.js';
 import { AppError } from './lib/errors.js';
 import { deviceRoutes } from './push/routes.js';
 import { safetyRoutes } from './safety/routes.js';
+import { trailRoutes } from './trails/routes.js';
 import { userRoutes } from './users/routes.js';
 
 export function buildApp() {
@@ -23,5 +26,8 @@ export function buildApp() {
   app.register(dropRoutes);
   app.register(safetyRoutes);
   app.register(deviceRoutes);
+  app.register(trailRoutes);
+  app.register(echoRoutes);
+  app.register(circleRoutes);
   return app;
 }

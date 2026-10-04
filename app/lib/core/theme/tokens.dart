@@ -18,6 +18,9 @@ abstract final class TraceColors {
   /// Unlocked / success.
   static const mint = Color(0xFF5FE3C3);
 
+  /// Circles: private groups.
+  static const iris = Color(0xFFB4A2FF);
+
   /// Errors and warnings.
   static const rose = Color(0xFFFF5C7A);
   static const amber = Color(0xFFFFC857);

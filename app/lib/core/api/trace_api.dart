@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'conditions.dart';
 import 'models.dart';
+import 'social.dart';
 
 /// Everything the app needs from the backend. Implemented by [LiveApi] and [DemoApi].
 abstract class TraceApi {
@@ -31,12 +32,28 @@ abstract class TraceApi {
     bool revealConditions = false,
     DateTime? unlockAt,
     List<String> recipientHandles = const [],
+    String? circleId,
   });
 
   /// The true point of a drop once you're within 100 m of it (compass, F-07).
   Future<NearHint> nearHint(String dropId, LocationFix fix);
 
   Future<Passport> passport();
+
+  // Echoes (F-11)
+  Future<List<Echo>> echoes(String dropId);
+  Future<Echo> postEcho(String dropId, String body, LocationFix fix);
+
+  // Trails (F-10)
+  Future<String> createTrail(String title, List<({String dropId, String? clue})> stops);
+  Future<Trail> trail(String trailId);
+
+  // Circles (F-12)
+  Future<List<Circle>> circles();
+  Future<Circle> createCircle(String name);
+  Future<Circle> joinCircle(String code);
+  Future<Circle> circle(String circleId);
+  Future<void> leaveCircle(String circleId);
 
   Future<void> reportDrop(String dropId, {String? reason});
   Future<void> blockAuthor(String dropId);

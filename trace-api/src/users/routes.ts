@@ -64,6 +64,12 @@ export async function userRoutes(app: FastifyInstance) {
       FROM drops d
       WHERE d.creator_id = ${req.userId} AND d.status <> 'removed'
       ORDER BY d.created_at DESC`;
-    return { unlocked, created, stamps: [] };
+    const stamps = await sql`
+      SELECT t.id AS trail_id, t.title, c.completed_at,
+             (SELECT count(*)::int FROM trail_stops s WHERE s.trail_id = t.id) AS stops
+      FROM trail_completions c JOIN trails t ON t.id = c.trail_id
+      WHERE c.user_id = ${req.userId}
+      ORDER BY c.completed_at DESC`;
+    return { unlocked, created, stamps };
   });
 }

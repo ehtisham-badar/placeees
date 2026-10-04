@@ -9,6 +9,8 @@ import '../../core/theme/theme.dart';
 import '../../core/theme/tokens.dart';
 import '../../ui/buttons.dart';
 import '../../ui/drop_glyph.dart';
+import '../echoes/echoes_section.dart';
+import '../trails/trail_banner.dart';
 
 /// The opened drop. Reopenable from anywhere once unlocked. Pops `true` if the map should refresh.
 class DropDetailPage extends StatefulWidget {
@@ -159,6 +161,7 @@ class _Body extends StatelessWidget {
             ),
             const Spacer(),
             if (c.pending) const TagChip(label: 'In review', icon: Icons.schedule_rounded, color: TraceColors.amber),
+            if (c.circle != null) TagChip(label: c.circle!.name, icon: Icons.group_rounded, color: TraceColors.iris),
           ],
         ),
         if (c.teaser != null) ...[
@@ -177,8 +180,16 @@ class _Body extends StatelessWidget {
             style: serif(size: 18, style: FontStyle.italic, color: TraceColors.textMuted),
           ),
         ),
+        if (c.trail != null) ...[
+          const SizedBox(height: Space.xl),
+          TrailBanner(trail: c.trail!, unlocked: c.mine || c.unlockedAt != null),
+        ],
         const SizedBox(height: Space.xl),
         _Stamp(content: c, justUnlocked: justUnlocked),
+        if (!c.pending) ...[
+          const SizedBox(height: Space.xl + Space.sm),
+          EchoesSection(dropId: c.id),
+        ],
       ],
     );
   }

@@ -19,7 +19,8 @@ flutter run
 ```
 
 Without `TRACE_API_URL` the app runs against an in-memory demo backend that seeds hand-written
-drops around your location. Tap a glow, then **Demo: walk there** to feel the unlock.
+drops around your location. Tap a glow, then **Demo: walk there** to feel the unlock. The demo also seeds a three-stop trail,
+a circle you're in, and one you can join with the code `WANDER29`.
 Add `--dart-define=DEMO_AUTOSTART=true` to skip sign-in and onboarding.
 
 ## Run against the API
@@ -79,4 +80,9 @@ with recipients and an "opened" push job (F-09).
 Still open from phase 2: hunting with the screen locked (background location) and registering
 device push tokens in the app (needs Firebase/APNs credentials).
 
-**Next — Phase 3 (social layer):** trails (F-10), echoes (F-11), circles (F-12).
+**Phase 3 — social layer (done):** trails with ordered clues, hidden later stops and passport
+stamps (F-10); echoes that can only be left in person (F-11); circles with invite codes and
+members-only drops (F-12).
+
+**Next — Phase 4 (signature features):** relay drops with journey view (F-13), Then/Now overlay
+camera (F-14).

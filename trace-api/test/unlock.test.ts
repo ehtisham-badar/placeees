@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { evaluateUnlock, unlockRadius, type UnlockInput } from '../src/drops/unlock.js';
+import { evaluateUnlock, presenceFailure, unlockRadius, type UnlockInput } from '../src/drops/unlock.js';
 
 const NOW = Date.parse('2026-10-04T14:22:20Z');
 
@@ -9,6 +9,7 @@ function input(overrides: Partial<UnlockInput> = {}, payload: Partial<UnlockInpu
     previousFix: null,
     distanceM: 20,
     visible: true,
+    trailOrderOk: true,
     unlockAt: null,
     conditionsMet: async () => true,
     now: NOW,
@@ -68,5 +69,24 @@ describe('evaluateUnlock ordering', () => {
     await evaluateUnlock(input({ distanceM: 500, conditionsMet }));
     await evaluateUnlock(input({ unlockAt: new Date(NOW + 60_000), conditionsMet }));
     expect(calls).toBe(0);
+  });
+});
+
+describe('trails', () => {
+  it('blocks later stops until the previous one is unlocked', async () => {
+    expect(await evaluateUnlock(input({ trailOrderOk: false }))).toBe('trail_order');
+  });
+
+  it('checks presence before trail order', async () => {
+    expect(await evaluateUnlock(input({ trailOrderOk: false, distanceM: 500 }))).toBe('too_far');
+  });
+});
+
+describe('presenceFailure (echoes)', () => {
+  it('applies the same place checks as an unlock, and nothing else', () => {
+    const base = input();
+    expect(presenceFailure(base)).toBeNull();
+    expect(presenceFailure({ ...base, distanceM: 500 })).toBe('too_far');
+    expect(presenceFailure({ ...base, payload: { ...base.payload, accuracy: 200 } })).toBe('low_accuracy');
   });
 });

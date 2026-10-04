@@ -18,6 +18,7 @@ const CreateDrop = z.object({
   revealConditions: z.boolean().default(false),
   unlockAt: z.iso.datetime({ offset: true }).transform((s) => new Date(s)).optional(),
   recipientHandles: z.array(z.string().max(21)).max(20).optional(),
+  circleId: z.uuid().optional(),
 });
 
 const Nearby = z.object({

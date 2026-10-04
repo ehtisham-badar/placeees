@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:latlong2/latlong.dart';
 
 import 'conditions.dart';
+import 'social.dart';
 
 enum DropType {
   text,
@@ -62,6 +63,8 @@ class NearbyDrop {
     this.capsuleUnlockAt,
     this.forYou = false,
     this.isRelay = false,
+    this.trail,
+    this.circle,
   });
 
   final String id;
@@ -85,6 +88,8 @@ class NearbyDrop {
   /// A time capsule addressed to you.
   final bool forYou;
   final bool isRelay;
+  final TrailRef? trail;
+  final CircleRef? circle;
 
   bool get canOpenAnywhere => mine || unlocked;
   bool get isSealed => capsuleUnlockAt != null && DateTime.now().isBefore(capsuleUnlockAt!);
@@ -105,6 +110,8 @@ class NearbyDrop {
         capsuleUnlockAt: capsuleUnlockAt,
         forYou: forYou,
         isRelay: isRelay,
+        trail: trail,
+        circle: circle,
       );
 
   factory NearbyDrop.fromJson(Map<String, dynamic> j) {
@@ -131,6 +138,8 @@ class NearbyDrop {
       capsuleUnlockAt: badges['capsuleUnlockAt'] == null ? null : DateTime.parse(badges['capsuleUnlockAt'] as String),
       forYou: badges['forYou'] as bool? ?? false,
       isRelay: badges['relay'] as bool? ?? false,
+      trail: TrailRef.fromJson(badges['trail']),
+      circle: CircleRef.fromJson(badges['circle']),
     );
   }
 }
@@ -150,6 +159,8 @@ class DropContent {
     this.unlockedAt,
     this.pending = false,
     this.localImage,
+    this.trail,
+    this.circle,
   });
 
   final String id;
@@ -160,6 +171,8 @@ class DropContent {
 
   /// Demo mode only: a photo that never left the device.
   final Uint8List? localImage;
+  final TrailRef? trail;
+  final CircleRef? circle;
 
   /// Null for anonymous drops.
   final String? authorHandle;
@@ -181,6 +194,8 @@ class DropContent {
         unlockCount: (j['unlockCount'] as num?)?.toInt() ?? 0,
         mine: j['mine'] as bool? ?? false,
         pending: j['status'] == 'pending_moderation',
+        trail: TrailRef.fromJson(j['trail']),
+        circle: CircleRef.fromJson(j['circle']),
       );
 }
 
@@ -224,10 +239,13 @@ class PassportEntry {
 }
 
 class Passport {
-  const Passport({required this.unlocked, required this.created});
+  const Passport({required this.unlocked, required this.created, this.stamps = const []});
 
   final List<PassportEntry> unlocked;
   final List<PassportEntry> created;
+
+  /// Completed trails.
+  final List<Stamp> stamps;
 
   int get peopleReached => created.fold(0, (sum, e) => sum + e.unlockCount);
 }
