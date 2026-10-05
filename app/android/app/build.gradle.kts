@@ -57,6 +57,10 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Debug builds (Android Studio ▶) may talk to a dev API on the LAN over plain HTTP.
+            manifestPlaceholders["usesCleartextTraffic"] = "true"
+        }
         release {
             signingConfig = if (keystoreProperties.isNotEmpty()) {
                 signingConfigs.getByName("release")
