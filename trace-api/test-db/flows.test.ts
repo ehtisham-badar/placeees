@@ -359,3 +359,16 @@ describe('home quiet zone', () => {
     expect((await call('dave', 'POST', '/v1/drops', { type: 'text', body: 'hi', location: fix(at(0, 30, home)) })).status).toBe(201);
   });
 });
+
+describe('admin users', () => {
+  it('lists accounts with provider and counts, and searches by handle', async () => {
+    const all = (await admin('GET', '/v1/admin/users')).body.users;
+    const bob = all.find((u: any) => u.handle === 'bob');
+    expect(bob.provider).toBe('dev');
+    expect(bob.unlocks).toBeGreaterThan(0);
+    expect(Object.keys(bob)).not.toContain('appleSub');
+    expect(JSON.stringify(all)).not.toMatch(/googleSub|appleSub|lastFixGeo/);
+    const found = (await admin('GET', '/v1/admin/users?q=ali')).body.users;
+    expect(found.map((u: any) => u.handle)).toEqual(['alice']);
+  });
+});

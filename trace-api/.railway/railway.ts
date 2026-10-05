@@ -33,6 +33,10 @@ export default defineRailway(() => {
       LOCAL_MEDIA_DIR: "/data/media",
       PUBLIC_API_URL: "https://api-production-c9db.up.railway.app",
       PUBLIC_WEB_URL: "https://api-production-c9db.up.railway.app",
+      // Google sign-in: ID tokens must be issued for the Firebase project's web OAuth client.
+      GOOGLE_CLIENT_IDS: "885459685841-d7tmn8t53ahq7eaha09oouob7m38bao6.apps.googleusercontent.com",
+      // FCM push (Firebase project trace-app-5f40f); the service-account key is set only in Railway.
+      FCM_PROJECT_ID: "trace-app-5f40f",
       // Volumes are root-owned; the image's non-root user couldn't write to /data.
       RAILWAY_RUN_UID: "0",
     },

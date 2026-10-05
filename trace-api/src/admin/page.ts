@@ -135,6 +135,39 @@ const tabs = {
       e.detail && h('div', { class: 'meta' }, JSON.stringify(e.detail)),
       e.userId && h('div', { class: 'row' }, ban(e.userId, e.handle)))));
   },
+  async Users(v) {
+    const search = h('input', { placeholder: 'Search handle…', value: usersQuery });
+    const form = h('form', { class: 'row', onsubmit: (ev) => { ev.preventDefault(); usersQuery = search.value.trim(); render(); } },
+      search, h('button', { class: 'act' }, 'Search'));
+    v.append(form);
+    const { users } = await api('/users' + (usersQuery ? '?q=' + encodeURIComponent(usersQuery) : ''));
+    v.append(h('h2', {}, users.length + (users.length === 1 ? ' account' : ' accounts')));
+    if (!users.length) return v.append(h('div', { class: 'empty' }, 'No accounts match.'));
+    const provider = { google: 'Google', apple: 'Apple', dev: 'Developer', seed: 'Seed' };
+    for (const u of users) {
+      const details = h('div', { class: 'meta', style: 'display:none;margin-top:8px' });
+      v.append(h('div', { class: 'card' }, h('div', { class: 'grow' },
+        h('div', {}, h('b', {}, u.handle ? '@' + u.handle : '(no handle yet)'), ' ',
+          h('span', { class: 'pill' }, provider[u.provider] || u.provider),
+          u.bannedAt ? h('span', { class: 'pill', style: 'background:rgba(255,92,122,.15);color:var(--rose);margin-left:6px' }, 'banned') : null),
+        h('div', { class: 'meta' }, 'joined ' + ago(u.createdAt) + (u.lastActiveAt ? ' · active ' + ago(u.lastActiveAt) : '') +
+          ' · ' + u.drops + ' drops · ' + u.unlocks + ' unlocks · ' + u.devices + ' devices' +
+          (u.hasHomeZone ? ' · home zone' : '') + (u.integrityEvents ? ' · ⚠ ' + u.integrityEvents + ' integrity events' : '')),
+        details,
+        h('div', { class: 'row' },
+          h('button', { class: 'act', onclick: async () => {
+            if (details.style.display === 'block') { details.style.display = 'none'; return; }
+            const d = await api('/users/' + u.id);
+            details.replaceChildren(
+              h('div', {}, 'id ' + d.user.id),
+              d.events.length ? h('div', {}, d.events.slice(0, 10).map((e) => h('div', {}, e.kind + ' · ' + ago(e.createdAt)))) : h('div', {}, 'No integrity events.'));
+            details.style.display = 'block';
+          } }, 'Details'),
+          u.bannedAt
+            ? act('Unban', 'ok', () => api('/users/' + u.id + '/ban', { banned: false }))
+            : ban(u.id, u.handle)))));
+    }
+  },
   async Venues(v) {
     const form = h('form', { class: 'row', onsubmit: async (ev) => {
       ev.preventDefault(); const f = new FormData(ev.target);
@@ -148,6 +181,7 @@ const tabs = {
   },
 };
 let current = 'Metrics';
+let usersQuery = '';
 async function render() {
   $('#tabs').replaceChildren(...Object.keys(tabs).map((t) => h('button', { class: t === current ? 'on' : '', onclick: () => { current = t; render(); } }, t)));
   const v = h('div'); $('#view').replaceChildren(v);

@@ -120,6 +120,28 @@ export async function adminRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
+  /** Everyone, newest first. Provider only (never the Apple/Google account ids), and no locations. */
+  app.get('/v1/admin/users', async (req) => {
+    const { q } = z.object({ q: z.string().trim().max(40).optional() }).parse(req.query);
+    const users = await sql`
+      SELECT u.id, u.handle, u.created_at, u.banned_at,
+             CASE WHEN u.apple_sub IS NOT NULL THEN 'apple'
+                  WHEN u.google_sub IS NOT NULL THEN 'google'
+                  WHEN u.dev_sub LIKE 'seed:%' THEN 'seed'
+                  ELSE 'dev' END AS provider,
+             u.home_zone IS NOT NULL AS has_home_zone,
+             u.last_fix_at AS last_active_at,
+             (SELECT count(*)::int FROM drops d WHERE d.creator_id = u.id) AS drops,
+             (SELECT count(*)::int FROM unlocks x WHERE x.user_id = u.id) AS unlocks,
+             (SELECT count(*)::int FROM integrity_events e WHERE e.user_id = u.id) AS integrity_events,
+             (SELECT count(*)::int FROM devices v WHERE v.user_id = u.id) AS devices
+      FROM users u
+      WHERE ${q ? sql`u.handle ILIKE ${'%' + q.replace(/[%_\\]/g, '') + '%'}` : sql`true`}
+      ORDER BY u.created_at DESC
+      LIMIT 200`;
+    return { users };
+  });
+
   app.get('/v1/admin/users/:id', async (req) => {
     const { id } = IdParam.parse(req.params);
     const [user] = await sql`
