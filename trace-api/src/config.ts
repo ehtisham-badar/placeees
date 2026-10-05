@@ -15,6 +15,8 @@ const Env = z.object({
     .default('')
     .transform((s) => s.split(',').map((x) => x.trim()).filter(Boolean)),
   ALLOW_DEV_LOGIN: bool,
+  /** When set, dev sign-in also needs this code (for a dev login reachable from the internet). */
+  DEV_LOGIN_CODE: z.string().default(''),
   NEARBY_RADIUS_M: z.coerce.number().default(2000),
   R2_ACCOUNT_ID: z.string().default(''),
   R2_ACCESS_KEY_ID: z.string().default(''),

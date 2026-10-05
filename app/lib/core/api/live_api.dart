@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 import '../analytics.dart' show AppEvent;
+import '../config.dart';
 import '../integrity/integrity_service.dart';
 import 'api_error.dart';
 import 'conditions.dart';
@@ -72,7 +73,10 @@ class LiveApi implements TraceApi {
   Future<AuthResult> signInWithGoogle(String idToken) => _auth('/v1/auth/google', {'idToken': idToken});
 
   @override
-  Future<AuthResult> signInDemo(String name) => _auth('/v1/auth/dev', {'name': name});
+  Future<AuthResult> signInDemo(String name) => _auth('/v1/auth/dev', {
+        'name': name,
+        if (AppConfig.devLoginCode.isNotEmpty) 'code': AppConfig.devLoginCode,
+      });
 
   @override
   Future<User> me() async => User.fromJson(await _send('GET', '/v1/me') as Map<String, dynamic>);

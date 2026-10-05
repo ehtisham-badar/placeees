@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { config } from '../config.js';
@@ -35,7 +36,12 @@ export async function authRoutes(app: FastifyInstance) {
 
   if (config.ALLOW_DEV_LOGIN) {
     app.post('/v1/auth/dev', strict, async (req) => {
-      const { name } = z.object({ name: z.string().min(1).max(40) }).parse(req.body);
+      const { name, code } = z.object({ name: z.string().min(1).max(40), code: z.string().max(200).optional() }).parse(req.body);
+      if (config.DEV_LOGIN_CODE) {
+        const a = Buffer.from(code ?? '');
+        const b = Buffer.from(config.DEV_LOGIN_CODE);
+        if (a.length !== b.length || !timingSafeEqual(a, b)) throw new AppError('unauthorized', 401);
+      }
       return signIn('dev_sub', name);
     });
   }

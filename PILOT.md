@@ -3,6 +3,16 @@
 Everything here needs your accounts (Railway, Cloudflare, Apple, Google), so it's a checklist for you
 rather than something the repo can do on its own. Spec references: `TRACE_MVP.md` §10–§12.
 
+## Current deployment (2026-10-06)
+
+- Railway project **trace**: `postgis` (postgis/postgis:16-3.4 on a volume, private network only) and
+  `api` (this repo's Dockerfile, public at `https://api-production-c9db.up.railway.app`).
+- Media: `LOCAL_MEDIA_DIR=/data/media` on an `api` volume until R2 is set up.
+- Sign-in: dev sign-in guarded by `DEV_LOGIN_CODE` until Google/Apple sign-in is configured.
+- Deploy: `cd trace-api && railway up --service api --ci` (not yet wired to GitHub).
+- Secrets (JWT, admin token, DB password, dev login code) live only in Railway variables.
+- Railway's `railway.json` (config-as-code) is deprecated: migrate before **2026-12-01**.
+
 ## 1. Deploy the API (Railway)
 
 1. Create a Railway project → **Add PostgreSQL**. In its *Data* tab run `CREATE EXTENSION postgis;`

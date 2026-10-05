@@ -31,5 +31,8 @@ class AppConfig {
   /// Local testing against a dev API: shows a name-only sign-in (the API needs ALLOW_DEV_LOGIN).
   static const devLogin = bool.fromEnvironment('DEV_LOGIN');
 
+  /// Sent with dev sign-in when the API requires DEV_LOGIN_CODE (a dev login on a public server).
+  static const devLoginCode = String.fromEnvironment('DEV_LOGIN_CODE');
+
   static bool get isDemo => apiUrl.isEmpty;
 }
