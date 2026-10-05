@@ -87,6 +87,9 @@ async function sendFcm(deviceToken: string, msg: PushMessage): Promise<'ok' | 'g
   return res.status === 404 ? 'gone' : 'error';
 }
 
+/** Which push channels this server can use. */
+export const pushStatus = () => ({ apns: apnsEnabled, fcm: fcmEnabled });
+
 /** Sends to every registered device of these users. Dead tokens are pruned. */
 export async function pushToUsers(userIds: string[], msg: PushMessage): Promise<number> {
   if (userIds.length === 0 || (!apnsEnabled && !fcmEnabled)) return 0;

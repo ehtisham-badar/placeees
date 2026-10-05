@@ -163,6 +163,14 @@ const tabs = {
               d.events.length ? h('div', {}, d.events.slice(0, 10).map((e) => h('div', {}, e.kind + ' · ' + ago(e.createdAt)))) : h('div', {}, 'No integrity events.'));
             details.style.display = 'block';
           } }, 'Details'),
+          h('button', { class: 'act', onclick: async () => {
+            try {
+              const r = await api('/users/' + u.id + '/test-push', {});
+              toast(!r.fcm && !r.apns ? 'Push isn’t configured on the server'
+                : r.devices === 0 ? 'No devices registered (notifications off?)'
+                : 'Sent to ' + r.sent + ' of ' + r.devices + ' devices');
+            } catch (err) { toast(err.message); }
+          } }, 'Send test push'),
           u.bannedAt
             ? act('Unban', 'ok', () => api('/users/' + u.id + '/ban', { banned: false }))
             : ban(u.id, u.handle)))));

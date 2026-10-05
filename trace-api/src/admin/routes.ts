@@ -8,6 +8,7 @@ import { sql } from '../db/client.js';
 import { AppError, notFound } from '../lib/errors.js';
 import { signedReadUrl } from '../media/r2.js';
 import { pilotMetrics } from '../metrics/routes.js';
+import { pushStatus, pushToUsers } from '../push/send.js';
 
 function tokenMatches(given: string | undefined): boolean {
   if (!config.ADMIN_TOKEN || !given) return false;
@@ -154,6 +155,19 @@ export async function adminRoutes(app: FastifyInstance) {
     const events = await sql`
       SELECT kind, detail, created_at FROM integrity_events WHERE user_id = ${id} ORDER BY created_at DESC LIMIT 50`;
     return { user, events };
+  });
+
+  /** Sends a test notification to all of a user's devices (debugging push end to end). */
+  app.post('/v1/admin/users/:id/test-push', async (req) => {
+    const { id } = IdParam.parse(req.params);
+    const [{ devices } = { devices: 0 }] = await sql<{ devices: number }[]>`
+      SELECT count(*)::int AS devices FROM devices WHERE user_id = ${id}`;
+    const sent = await pushToUsers([id], {
+      title: 'Hello from Trace',
+      body: 'Push notifications are working on this phone.',
+      data: { kind: 'test' },
+    });
+    return { ...pushStatus(), devices, sent };
   });
 
   app.post('/v1/admin/users/:id/ban', async (req) => {

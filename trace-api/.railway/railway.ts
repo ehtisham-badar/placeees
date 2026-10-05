@@ -25,6 +25,8 @@ export default defineRailway(() => {
       JWT_SECRET: preserve(),
       ADMIN_TOKEN: preserve(),
       DEV_LOGIN_CODE: preserve(),
+      FCM_CLIENT_EMAIL: preserve(),
+      FCM_PRIVATE_KEY: preserve(),
       // Plain settings, versioned here.
       ALLOW_DEV_LOGIN: "true",
       INTEGRITY_MODE: "off",
