@@ -56,6 +56,12 @@ class Session extends ChangeNotifier {
     _route(onboarded: onboarded);
   }
 
+  /// After a profile change (e.g. home zone) so screens show the latest.
+  void updateUser(User u) {
+    user = u;
+    notifyListeners();
+  }
+
   Future<void> chooseHandle(String handle) async {
     user = await api.setHandle(handle);
     advance(OnboardingStep.location);
@@ -74,7 +80,11 @@ class Session extends ChangeNotifier {
   Future<void> signOut() async {
     api.token = null;
     user = null;
-    if (_persist) await _storage.deleteAll();
+    // Only this account's session. Device-level keys (App Attest, push token) stay with the phone.
+    if (_persist) {
+      await _storage.delete(key: _tokenKey);
+      await _storage.delete(key: _onboardedKey);
+    }
     step = OnboardingStep.handle;
     _go(SessionStage.signedOut);
   }

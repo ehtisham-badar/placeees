@@ -19,6 +19,7 @@ abstract class TraceApi {
   Future<User> setHandle(String handle);
   Future<bool> isHandleAvailable(String handle);
   Future<User> setHomeZone(double lat, double lng);
+  Future<User> clearHomeZone();
 
   Future<List<NearbyDrop>> nearby(double lat, double lng);
   Future<DropContent> unlock(String dropId, LocationFix fix);

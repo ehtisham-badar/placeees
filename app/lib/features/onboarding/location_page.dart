@@ -20,6 +20,28 @@ class LocationPage extends StatefulWidget {
 class _LocationPageState extends State<LocationPage> {
   bool _asking = false;
 
+  /// Permission belongs to the phone, not the account: if it's already granted, skip this step.
+  bool _checking = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _skipIfGranted();
+  }
+
+  Future<void> _skipIfGranted() async {
+    final location = context.read<LocationService>();
+    final session = context.read<Session>();
+    await location.refreshAccess();
+    if (!mounted) return;
+    if (location.access == LocationAccess.granted) {
+      await location.start();
+      session.advance(OnboardingStep.homeZone);
+    } else {
+      setState(() => _checking = false);
+    }
+  }
+
   Future<void> _enable() async {
     final location = context.read<LocationService>();
     final session = context.read<Session>();
@@ -43,6 +65,7 @@ class _LocationPageState extends State<LocationPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_checking) return const Scaffold(body: SizedBox.shrink());
     final access = context.watch<LocationService>().access;
     final label = switch (access) {
       LocationAccess.deniedForever => 'Open Settings',

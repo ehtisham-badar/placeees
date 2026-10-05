@@ -87,7 +87,8 @@ async function assertCanPlaceAt(userId: string, p: LocationPayload, cell: string
   if (!counts) throw new AppError('internal', 500);
   if (counts.today >= MAX_DROPS_PER_DAY) throw new AppError('daily_limit', 429);
   if (counts.inCell >= MAX_DROPS_PER_CELL_PER_DAY) throw new AppError('place_limit', 429);
-  if (counts.inHome) throw new AppError('home_zone', 422);
+  // Both zones keep *public* drops away; circle and addressed drops can't lead strangers anywhere.
+  if (counts.inHome && isPublic) throw new AppError('home_zone', 422);
   if (counts.inZone && isPublic) throw new AppError('exclusion_zone', 422);
 }
 

@@ -12,6 +12,7 @@ import '../../ui/buttons.dart';
 import '../../ui/drop_glyph.dart';
 import '../../ui/pulse_rings.dart';
 import '../../core/alerts/nearby_alerts.dart';
+import '../../core/location/location_service.dart';
 import '../../core/push/push_service.dart';
 import '../circles/circles_page.dart';
 import '../trails/stamp.dart';
@@ -67,6 +68,7 @@ class _PassportPageState extends State<PassportPage> {
             children: [
               const _PushTile(),
               const _AlertsTile(),
+              const _HomeZoneTile(),
               const Divider(height: 1, color: TraceColors.line),
               ListTile(
                 leading: const Icon(Icons.logout_rounded, color: TraceColors.rose),
@@ -485,6 +487,67 @@ class _PushTileState extends State<_PushTile> {
               }
               if (mounted) setState(() => _busy = false);
             },
+    );
+  }
+}
+
+/// Move the home quiet zone to where you are, or turn it off (spec F-05).
+class _HomeZoneTile extends StatefulWidget {
+  const _HomeZoneTile();
+
+  @override
+  State<_HomeZoneTile> createState() => _HomeZoneTileState();
+}
+
+class _HomeZoneTileState extends State<_HomeZoneTile> {
+  bool _busy = false;
+
+  Future<void> _run(Future<void> Function() action, String done) async {
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _busy = true);
+    try {
+      await action();
+      messenger.showSnackBar(SnackBar(content: Text(done)));
+    } on ApiError catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final session = context.watch<Session>();
+    final on = session.user?.hasHomeZone ?? false;
+    return ListTile(
+      leading: const Icon(Icons.shield_moon_rounded, color: TraceColors.mint),
+      title: const Text('Home quiet zone', style: TextStyle(fontWeight: FontWeight.w700)),
+      subtitle: Text(
+        on ? 'On · no public drops within 200 m of home' : 'Off',
+        style: const TextStyle(color: TraceColors.textMuted, fontSize: 12),
+      ),
+      trailing: _busy
+          ? const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2))
+          : PopupMenuButton<String>(
+              icon: const Icon(Icons.more_horiz_rounded, color: TraceColors.textMuted),
+              color: TraceColors.surfaceHigh,
+              onSelected: (choice) async {
+                final api = session.api;
+                if (choice == 'here') {
+                  await _run(() async {
+                    final fix = await context.read<LocationService>().freshFix();
+                    if (fix == null) throw const ApiError('low_accuracy');
+                    session.updateUser(await api.setHomeZone(fix.lat, fix.lng));
+                  }, 'Home is now where you’re standing.');
+                } else {
+                  await _run(() async => session.updateUser(await api.clearHomeZone()), 'Home quiet zone is off.');
+                }
+              },
+              itemBuilder: (_) => [
+                const PopupMenuItem(value: 'here', child: Text('Set home to where I am')),
+                if (on) const PopupMenuItem(value: 'off', child: Text('Turn off')),
+              ],
+            ),
     );
   }
 }

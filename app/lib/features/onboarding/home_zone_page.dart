@@ -19,6 +19,16 @@ class HomeZonePage extends StatefulWidget {
 class _HomeZonePageState extends State<HomeZonePage> {
   bool _saving = false;
 
+  @override
+  void initState() {
+    super.initState();
+    // Already set for this account (e.g. signing back in): nothing to ask.
+    final session = context.read<Session>();
+    if (session.user?.hasHomeZone ?? false) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => session.finishOnboarding());
+    }
+  }
+
   Future<void> _setHere() async {
     final session = context.read<Session>();
     final messenger = ScaffoldMessenger.of(context);
@@ -29,7 +39,7 @@ class _HomeZonePageState extends State<HomeZonePage> {
         messenger.showSnackBar(const SnackBar(content: Text("We couldn't get a location fix. Try again outside.")));
         return;
       }
-      await session.api.setHomeZone(fix.lat, fix.lng);
+      session.updateUser(await session.api.setHomeZone(fix.lat, fix.lng));
       messenger.showSnackBar(const SnackBar(content: Text('Home is now a quiet zone.')));
       await session.finishOnboarding();
     } on ApiError catch (e) {

@@ -643,3 +643,4 @@ trace-api/
 | 2026-10-06 | Voice drops store a 48-bar loudness waveform with the audio | Playback shows the recording's real shape |
 | 2026-10-06 | Voice audio isn't machine-moderated (teaser text is); reports cover the rest | No reliable audio moderation in the stack yet |
 | 2026-10-06 | Dev media store (`LOCAL_MEDIA_DIR`): files on the API's disk behind HMAC-signed, expiring URLs | Photo/voice work on a phone against a local API; production uses R2 |
+| 2026-10-06 | Home quiet zone blocks public drops only (circle/addressed drops allowed); editable in Settings | Matches §5 F-02; testers set home where they test |

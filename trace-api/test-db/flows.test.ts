@@ -333,3 +333,29 @@ describe('voice drops (local media store)', () => {
     expect((await app.inject({ method: 'GET', url: tampered })).statusCode).toBe(403);
   });
 });
+
+describe('home quiet zone', () => {
+  it('blocks public drops at home, allows circle drops, and can be turned off', async () => {
+    const home = at(270, 2500);
+    await rewind('dave');
+    expect((await call('dave', 'PUT', '/v1/me/home-zone', { lat: home.lat, lng: home.lng })).body.hasHomeZone).toBe(true);
+
+    await rewind('dave');
+    const pub = await call('dave', 'POST', '/v1/drops', { type: 'text', body: 'hi', location: fix(at(0, 30, home)) });
+    expect(pub.body.error).toBe('home_zone');
+
+    const circle = (await call('dave', 'POST', '/v1/circles', { name: 'Family' })).body;
+    await rewind('dave');
+    const inCircle = await call('dave', 'POST', '/v1/drops', {
+      type: 'text',
+      body: 'for family',
+      circleId: circle.id,
+      location: fix(at(0, 30, home)),
+    });
+    expect(inCircle.status).toBe(201);
+
+    expect((await call('dave', 'DELETE', '/v1/me/home-zone')).body.hasHomeZone).toBe(false);
+    await rewind('dave');
+    expect((await call('dave', 'POST', '/v1/drops', { type: 'text', body: 'hi', location: fix(at(0, 30, home)) })).status).toBe(201);
+  });
+});

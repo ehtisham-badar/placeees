@@ -72,6 +72,12 @@ class DemoApi implements TraceApi {
   }
 
   @override
+  Future<User> clearHomeZone() async {
+    await _latency();
+    return _user = User(id: _user.id, handle: _user.handle, hasHomeZone: false);
+  }
+
+  @override
   Future<List<NearbyDrop>> nearby(double lat, double lng) async {
     if (_drops.isEmpty) _seed(LatLng(lat, lng));
     await _latency(250);

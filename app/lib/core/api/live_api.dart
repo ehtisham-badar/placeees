@@ -92,6 +92,10 @@ class LiveApi implements TraceApi {
       User.fromJson(await _send('PUT', '/v1/me/home-zone', body: {'lat': lat, 'lng': lng}) as Map<String, dynamic>);
 
   @override
+  Future<User> clearHomeZone() async =>
+      User.fromJson(await _send('DELETE', '/v1/me/home-zone') as Map<String, dynamic>);
+
+  @override
   Future<List<NearbyDrop>> nearby(double lat, double lng) async {
     final j = await _send('GET', '/v1/drops/nearby', query: {'lat': '$lat', 'lng': '$lng'}) as Map<String, dynamic>;
     return (j['drops'] as List).map((d) => NearbyDrop.fromJson(d as Map<String, dynamic>)).toList();

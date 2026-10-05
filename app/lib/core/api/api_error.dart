@@ -16,7 +16,8 @@ class ApiError implements Exception {
         'locked' => 'You have to be there to open this one.',
         'daily_limit' => "You've left 10 drops today. Come back tomorrow.",
         'place_limit' => "You've already left 3 drops around here today.",
-        'home_zone' => "You're inside your home quiet zone. Public drops can't be left here.",
+        'home_zone' => "You're inside your home quiet zone, so public drops can't go here. "
+            'Share it with a circle instead, or change the zone in Passport → Settings.',
         'exclusion_zone' => "Drops can't be left in this area.",
         'handle_taken' => 'That handle is taken.',
         'trail_order' => 'This trail goes in order. Find the previous stop first.',
