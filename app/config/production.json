@@ -1,0 +1,8 @@
+{
+  "TRACE_API_URL": "https://api-production-c9db.up.railway.app",
+  "GOOGLE_SERVER_CLIENT_ID": "885459685841-d7tmn8t53ahq7eaha09oouob7m38bao6.apps.googleusercontent.com",
+  "FIREBASE_API_KEY": "AIzaSyCHniOkul1fKE7LPCfN94pr1JWxOsNzOCA",
+  "FIREBASE_ANDROID_APP_ID": "1:885459685841:android:de06b64f50305a982410f0",
+  "FIREBASE_SENDER_ID": "885459685841",
+  "FIREBASE_PROJECT_ID": "trace-app-5f40f"
+}

@@ -10,6 +10,21 @@ The full product spec is in [`TRACE_MVP.md`](TRACE_MVP.md).
 | `app/` | Flutter app (iOS + Android) |
 | `trace-api/` | Node.js + TypeScript + Fastify API on PostgreSQL/PostGIS |
 
+## Build the app against the live server
+
+```bash
+cd app
+flutter build apk --release --dart-define-from-file=config/production.json
+adb install -r build/app/outputs/flutter-apk/app-release.apk   # -r updates in place, keeping sign-in
+```
+
+`config/production.json` holds the public build settings: API URL, Google sign-in client and the
+Firebase app ids. None of these are secrets (they ship inside every APK and Google restricts them
+to this app's package and signing key). The real secrets (JWT, admin token, database, Firebase
+service account) live only in Railway.
+
+Avoid `flutter install`: it uninstalls first, which signs you out and drops the push registration.
+
 ## Run the app (demo mode — no backend needed)
 
 ```bash
