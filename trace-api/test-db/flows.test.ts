@@ -372,3 +372,23 @@ describe('admin users', () => {
     expect(found.map((u: any) => u.handle)).toEqual(['alice']);
   });
 });
+
+describe('pre-upload check', () => {
+  it('refuses before any upload, and passes when the drop would be accepted', async () => {
+    const home = at(300, 3200);
+    await rewind('carol');
+    await call('carol', 'PUT', '/v1/me/home-zone', { lat: home.lat, lng: home.lng });
+    await rewind('carol');
+    const atHome = await call('carol', 'POST', '/v1/drops/check', { type: 'photo', location: fix(at(0, 20, home)) });
+    expect(atHome.body.error).toBe('home_zone');
+    await rewind('carol');
+    const weak = await call('carol', 'POST', '/v1/drops/check', { type: 'voice', location: fix(at(0, 900, home), 120) });
+    expect(weak.body.error).toBe('low_accuracy');
+    await rewind('carol');
+    const ok = await call('carol', 'POST', '/v1/drops/check', { type: 'voice', location: fix(at(0, 900, home)) });
+    expect(ok.status).toBe(204);
+    // Nothing was created by checking.
+    const [{ count }] = await sql`SELECT count(*)::int FROM drops WHERE creator_id = ${users.carol!.id} AND type = 'voice'`;
+    expect(count).toBe(0);
+  });
+});

@@ -132,27 +132,34 @@ class LiveApi implements TraceApi {
     Uint8List? voiceAac,
     List<double>? waveform,
   }) async {
-    final mediaKey = photoJpeg != null
-        ? await _upload(photoJpeg)
-        : voiceAac != null
-            ? await _upload(voiceAac, contentType: 'audio/mp4')
-            : null;
+    // Everything except the content itself: what the server needs to decide if the drop is allowed.
+    Future<Map<String, dynamic>> rules() async => {
+          'type': type.wire,
+          'teaser': ?(teaser == null || teaser.isEmpty ? null : teaser),
+          'isAnonymous': isAnonymous,
+          'location': await _loc(fix),
+          if (conditions.isNotEmpty) ...{
+            'conditions': {'all': [for (final c in conditions) c.toJson()]},
+            'revealConditions': revealConditions,
+          },
+          if (unlockAt != null) 'unlockAt': unlockAt.toUtc().toIso8601String(),
+          if (recipientHandles.isNotEmpty) 'recipientHandles': recipientHandles,
+          'circleId': ?circleId,
+          if (isRelay) 'isRelay': true,
+          if (angle != null) ...{'captureHeading': angle.heading, 'capturePitch': angle.pitch},
+        };
+
+    final media = photoJpeg ?? voiceAac;
+    String? mediaKey;
+    if (media != null) {
+      // Ask first, so a refused drop (home zone, weak GPS, limits) never uploads anything.
+      await _send('POST', '/v1/drops/check', body: await rules());
+      mediaKey = await _upload(media, contentType: photoJpeg != null ? 'image/jpeg' : 'audio/mp4');
+    }
     final j = await _send('POST', '/v1/drops', body: {
-      'type': type.wire,
+      ...await rules(), // re-signed: the upload may have taken a while
       'body': ?(body == null || body.isEmpty ? null : body),
       'mediaKey': ?mediaKey,
-      'teaser': ?(teaser == null || teaser.isEmpty ? null : teaser),
-      'isAnonymous': isAnonymous,
-      'location': await _loc(fix),
-      if (conditions.isNotEmpty) ...{
-        'conditions': {'all': [for (final c in conditions) c.toJson()]},
-        'revealConditions': revealConditions,
-      },
-      if (unlockAt != null) 'unlockAt': unlockAt.toUtc().toIso8601String(),
-      if (recipientHandles.isNotEmpty) 'recipientHandles': recipientHandles,
-      'circleId': ?circleId,
-      if (isRelay) 'isRelay': true,
-      if (angle != null) ...{'captureHeading': angle.heading, 'capturePitch': angle.pitch},
       if (waveform != null && waveform.length >= 8) 'waveform': waveform,
     }) as Map<String, dynamic>;
     return j['id'] as String;

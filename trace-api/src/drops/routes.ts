@@ -5,7 +5,8 @@ import { requireAuth } from '../auth/plugin.js';
 import { Conditions } from '../conditions/schema.js';
 import { LocationPayload } from '../integrity/location.js';
 import { CONTENT_TYPES, presignUpload, type MediaContentType } from '../media/r2.js';
-import { createDrop, getDropContent, nearHint, nearbyDrops, unlockDrop } from './service.js';
+import { checkDropRules, createDrop, getDropContent, nearHint, nearbyDrops, unlockDrop } from './service.js';
+import { limitAction } from '../lib/rateLimit.js';
 
 const CreateDrop = z.object({
   type: z.enum(['text', 'photo', 'voice', 'then_now']),
@@ -47,6 +48,13 @@ export async function dropRoutes(app: FastifyInstance) {
   app.post('/v1/drops', async (req, reply) => {
     const drop = await createDrop(req.userId, CreateDrop.parse(req.body));
     return reply.code(201).send(drop);
+  });
+
+  // Called before uploading a photo or voice note: same rules as creating, nothing created.
+  app.post('/v1/drops/check', async (req, reply) => {
+    await limitAction(req.userId, 'dropCheck');
+    await checkDropRules(req.userId, CreateDrop.parse(req.body));
+    return reply.code(204).send();
   });
 
   app.get('/v1/drops/nearby', async (req) => {

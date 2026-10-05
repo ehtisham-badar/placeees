@@ -102,21 +102,14 @@ async function assertTrustworthyFix(userId: string, p: LocationPayload) {
   }
 }
 
-export async function createDrop(userId: string, input: CreateDropInput) {
-  await limitAction(userId, 'createDrop');
+/**
+ * Everything that decides whether a drop may be left here, minus the media itself. Shared by
+ * createDrop and the pre-upload check, so a photo or voice note is never uploaded just to be refused.
+ */
+export async function checkDropRules(userId: string, input: Omit<CreateDropInput, 'mediaKey' | 'body' | 'waveform'>) {
   const p = input.location;
   await assertTrustworthyFix(userId, p);
   if (p.accuracy > MAX_CREATE_ACCURACY_M) throw new AppError('low_accuracy', 422);
-
-  if (input.type === 'text' && !input.body?.trim()) throw new AppError('body_required', 422);
-  if (input.type !== 'text') {
-    if (!input.mediaKey) throw new AppError('media_required', 422);
-    if (!ownsMediaKey(userId, input.mediaKey)) throw forbiddenMedia();
-    // The file has to be the kind the drop says it is.
-    const ext = input.mediaKey.split('.').pop();
-    const ok = input.type === 'voice' ? ext === 'm4a' || ext === 'aac' : ext === 'jpg';
-    if (!ok) throw new AppError('wrong_media_type', 422);
-  }
 
   if (input.type === 'then_now' && (input.captureHeading == null || input.capturePitch == null)) {
     throw new AppError('angle_required', 422);
@@ -141,6 +134,24 @@ export async function createDrop(userId: string, input: CreateDropInput) {
 
   const cell = geohash(p, 7);
   await assertCanPlaceAt(userId, p, cell, visibility === 'public');
+  return { recipientIds, visibility, cell };
+}
+
+export async function createDrop(userId: string, input: CreateDropInput) {
+  await limitAction(userId, 'createDrop');
+  const p = input.location;
+
+  if (input.type === 'text' && !input.body?.trim()) throw new AppError('body_required', 422);
+  if (input.type !== 'text') {
+    if (!input.mediaKey) throw new AppError('media_required', 422);
+    if (!ownsMediaKey(userId, input.mediaKey)) throw forbiddenMedia();
+    // The file has to be the kind the drop says it is.
+    const ext = input.mediaKey.split('.').pop();
+    const ok = input.type === 'voice' ? ext === 'm4a' || ext === 'aac' : ext === 'jpg';
+    if (!ok) throw new AppError('wrong_media_type', 422);
+  }
+
+  const { recipientIds, visibility, cell } = await checkDropRules(userId, input);
   await recordFix(userId, p);
 
   const [drop] = await sql<{ id: string; status: string; createdAt: Date }[]>`

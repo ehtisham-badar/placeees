@@ -28,7 +28,8 @@ export default defineRailway(() => {
       FCM_CLIENT_EMAIL: preserve(),
       FCM_PRIVATE_KEY: preserve(),
       // Plain settings, versioned here.
-      ALLOW_DEV_LOGIN: "true",
+      // Off in production: Google sign-in is live. Local testing sets it in its own env.
+      ALLOW_DEV_LOGIN: "false",
       INTEGRITY_MODE: "off",
       RUN_JOBS: "true",
       LOG_LEVEL: "info",

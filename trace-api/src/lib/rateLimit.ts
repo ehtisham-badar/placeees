@@ -6,6 +6,7 @@ export const ACTION_LIMITS = {
   unlock: { max: 30, windowMs: 60_000 },
   nearHint: { max: 30, windowMs: 60_000 },
   createDrop: { max: 6, windowMs: 60_000 },
+  dropCheck: { max: 20, windowMs: 60_000 },
   echo: { max: 10, windowMs: 60_000 },
   nowPhoto: { max: 6, windowMs: 60_000 },
   relay: { max: 10, windowMs: 60_000 },
