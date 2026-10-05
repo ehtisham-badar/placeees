@@ -9,9 +9,11 @@ rather than something the repo can do on its own. Spec references: `TRACE_MVP.md
   `api` (this repo's Dockerfile, public at `https://api-production-c9db.up.railway.app`).
 - Media: `LOCAL_MEDIA_DIR=/data/media` on an `api` volume until R2 is set up.
 - Sign-in: dev sign-in guarded by `DEV_LOGIN_CODE` until Google/Apple sign-in is configured.
-- Deploy: `cd trace-api && railway up --service api --ci` (not yet wired to GitHub).
+- Deploy: automatic. Every push to `main` that touches `trace-api/` builds and deploys the `api`
+  service (config in `trace-api/.railway/railway.ts`; preview changes with `railway config plan`).
 - Secrets (JWT, admin token, DB password, dev login code) live only in Railway variables.
-- Railway's `railway.json` (config-as-code) is deprecated: migrate before **2026-12-01**.
+- Railway config is infrastructure-as-code (`.railway/railway.ts`); secrets use `preserve()` so they
+  never enter the repo. Always run `railway config plan` before `apply`: anything not declared is removed.
 
 ## 1. Deploy the API (Railway)
 
