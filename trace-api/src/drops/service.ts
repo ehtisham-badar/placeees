@@ -19,6 +19,8 @@ export const MAX_DROPS_PER_DAY = 10;
 export const MAX_DROPS_PER_CELL_PER_DAY = 3;
 export const HOME_ZONE_RADIUS_M = 200;
 export const NEAR_HINT_RADIUS_M = 100;
+/** postgres.js sends untyped arrays as text[]; name the type for real[] (_float4). */
+const FLOAT4_ARRAY_OID = 1021;
 export const NEAR_HINT_TTL_MS = 5 * 60_000;
 export const CAPSULE_MIN_MS = 24 * 3600_000;
 export const CAPSULE_MAX_MS = 25 * 365.25 * 24 * 3600_000;
@@ -39,6 +41,7 @@ export interface CreateDropInput {
   recipientHandles?: string[];
   circleId?: string;
   isRelay: boolean;
+  waveform?: number[];
   captureHeading?: number;
   capturePitch?: number;
 }
@@ -108,6 +111,10 @@ export async function createDrop(userId: string, input: CreateDropInput) {
   if (input.type !== 'text') {
     if (!input.mediaKey) throw new AppError('media_required', 422);
     if (!ownsMediaKey(userId, input.mediaKey)) throw forbiddenMedia();
+    // The file has to be the kind the drop says it is.
+    const ext = input.mediaKey.split('.').pop();
+    const ok = input.type === 'voice' ? ext === 'm4a' || ext === 'aac' : ext === 'jpg';
+    if (!ok) throw new AppError('wrong_media_type', 422);
   }
 
   if (input.type === 'then_now' && (input.captureHeading == null || input.capturePitch == null)) {
@@ -138,14 +145,15 @@ export async function createDrop(userId: string, input: CreateDropInput) {
   const [drop] = await sql<{ id: string; status: string; createdAt: Date }[]>`
     INSERT INTO drops (creator_id, geo, geohash7, type, body, media_key, teaser, is_anonymous,
                        conditions, conditions_revealed, unlock_at, visibility, recipient_ids, circle_id,
-                       is_relay, capture_heading, capture_pitch)
+                       is_relay, capture_heading, capture_pitch, waveform)
     VALUES (${userId}, ST_MakePoint(${p.lng}, ${p.lat})::geography, ${cell}, ${input.type},
             ${input.body?.trim() || null}, ${input.mediaKey ?? null}, ${input.teaser?.trim() || null},
             ${input.isAnonymous}, ${input.conditions ? sql.json(input.conditions) : null},
             ${input.conditions ? input.revealConditions : false}, ${input.unlockAt ?? null},
             ${visibility}, ${recipientIds.length ? recipientIds : null}, ${input.circleId ?? null},
             ${input.isRelay}, ${input.type === 'then_now' ? input.captureHeading! : null},
-            ${input.type === 'then_now' ? input.capturePitch! : null})
+            ${input.type === 'then_now' ? input.capturePitch! : null},
+            ${input.type === 'voice' && input.waveform ? sql.array(input.waveform, FLOAT4_ARRAY_OID) : null})
     RETURNING id, status, created_at`;
   if (!drop) throw new AppError('internal', 500);
 
@@ -281,6 +289,7 @@ interface DropRow {
   carryDeadline: Date | null;
   captureHeading: number | null;
   capturePitch: number | null;
+  waveform: number[] | null;
 }
 
 async function loadDrop(userId: string, dropId: string): Promise<DropRow | undefined> {
@@ -295,7 +304,7 @@ async function loadDrop(userId: string, dropId: string): Promise<DropRow | undef
            (SELECT completed_at FROM trail_completions x WHERE x.trail_id = t.id AND x.user_id = ${userId})
              AS trail_completed_at,
            c.id AS circle_id, c.name AS circle_name,
-           d.is_relay, d.relay_carrier_id, d.capture_heading, d.capture_pitch,
+           d.is_relay, d.relay_carrier_id, d.capture_heading, d.capture_pitch, d.waveform,
            (SELECT count(*)::int FROM relay_hops h WHERE h.drop_id = d.id AND h.dropped_at IS NOT NULL
               AND NOT h.returned) AS relay_hops,
            EXISTS (SELECT 1 FROM relay_hops h WHERE h.drop_id = d.id AND h.carrier_id = ${userId}) AS carried_before,
@@ -346,6 +355,7 @@ export async function serializeContent(row: DropRow, userId: string) {
           canPickUp: !mine && !row.carriedBefore && row.relayCarrierId == null && row.unlockedAt != null,
         }
       : null,
+    waveform: row.type === 'voice' ? row.waveform : null,
     thenNow:
       row.type === 'then_now' ? { captureHeading: row.captureHeading, capturePitch: row.capturePitch } : null,
   };

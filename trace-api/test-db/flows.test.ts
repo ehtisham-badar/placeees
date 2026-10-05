@@ -294,3 +294,42 @@ describe('push devices', () => {
     expect((await sql`SELECT 1 FROM devices WHERE token = ${token}`).length).toBe(0);
   });
 });
+
+describe('voice drops (local media store)', () => {
+  it('uploads, gates behind an unlock, and plays back', async () => {
+    const where = at(30, 1900);
+    const presign = await call('alice', 'POST', '/v1/media/presign', { contentType: 'audio/mp4' });
+    expect(presign.status).toBe(200);
+    expect(presign.body.key).toMatch(/\.m4a$/);
+    const audio = Buffer.from('fake-aac-bytes-for-test');
+    const put = await app.inject({
+      method: 'PUT',
+      url: presign.body.url.replace('http://localhost', ''),
+      payload: audio,
+      headers: { 'content-type': 'audio/mp4' },
+    });
+    expect(put.statusCode).toBe(200);
+
+    // A photo key can't masquerade as a voice drop, and vice versa.
+    await rewind('alice');
+    expect(
+      (await call('alice', 'POST', '/v1/drops', { type: 'photo', mediaKey: presign.body.key, location: fix(where) })).body.error,
+    ).toBe('wrong_media_type');
+
+    const waveform = Array.from({ length: 32 }, (_, i) => (i % 8) / 8);
+    const id = await createDrop('alice', where, { type: 'voice', mediaKey: presign.body.key, waveform, teaser: 'Listen.' });
+    expect((await call('bob', 'GET', `/v1/drops/${id}`)).body.error).toBe('locked');
+
+    const opened = await unlock('bob', id, where);
+    expect(opened.body.type).toBe('voice');
+    expect(opened.body.waveform).toHaveLength(32);
+    const file = await app.inject({ method: 'GET', url: opened.body.mediaUrl.replace('http://localhost', '') });
+    expect(file.statusCode).toBe(200);
+    expect(file.headers['content-type']).toBe('audio/mp4');
+    expect(file.rawPayload.equals(audio)).toBe(true);
+
+    // Tampering with the signed URL is refused.
+    const tampered = opened.body.mediaUrl.replace('http://localhost', '').replace(/sig=[^&]+/, 'sig=nope');
+    expect((await app.inject({ method: 'GET', url: tampered })).statusCode).toBe(403);
+  });
+});

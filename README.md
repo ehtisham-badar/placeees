@@ -51,6 +51,9 @@ ORG_GRADLE_PROJECT_devCleartext=true flutter build apk --release \
 flutter install --release
 ```
 
+For photo and voice drops without R2, also start the API with `LOCAL_MEDIA_DIR=<folder>` and
+`PUBLIC_API_URL=http://<mac-lan-ip>:3000`.
+
 `DEV_LOGIN` replaces Apple/Google sign-in with a name-only developer sign-in, and `devCleartext`
 allows plain HTTP to the Mac. Store builds set neither, so they stay HTTPS-only.
 
@@ -71,6 +74,7 @@ allows plain HTTP to the Mac. Store builds set neither, so they stay HTTPS-only.
 | api | `APPLE_TEAM_ID`, `ANDROID_CERT_SHA256`, `GOOGLE_SA_*` | Attestation and app-link verification |
 | api | `ADMIN_TOKEN` | Enables the admin API and the `/admin` console |
 | api | `PUBLIC_WEB_URL`, `APP_STORE_URL`, `PLAY_STORE_URL` | Venue links and their landing page |
+| api | `LOCAL_MEDIA_DIR`, `PUBLIC_API_URL` | Dev only: store photo/voice uploads on the API's disk when R2 isn't set |
 | app | `PLAY_CLOUD_PROJECT_NUMBER` | Enables Play Integrity tokens on Android |
 
 Google sign-in on iOS also needs the reversed client id added as a URL scheme in

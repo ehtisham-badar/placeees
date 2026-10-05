@@ -188,6 +188,8 @@ class DropContent {
     this.circle,
     this.relay,
     this.angle,
+    this.waveform,
+    this.localAudio,
   });
 
   final String id;
@@ -204,6 +206,12 @@ class DropContent {
 
   /// Then/Now drops only.
   final CaptureAngle? angle;
+
+  /// Voice drops: loudness levels in 0..1, for drawing the recording.
+  final List<double>? waveform;
+
+  /// Demo mode only: a recording that never left the device.
+  final Uint8List? localAudio;
 
   /// Null for anonymous drops.
   final String? authorHandle;
@@ -229,6 +237,7 @@ class DropContent {
         circle: CircleRef.fromJson(j['circle']),
         relay: RelayInfo.fromJson(j['relay']),
         angle: CaptureAngle.fromJson(j['thenNow']),
+        waveform: (j['waveform'] as List?)?.map((v) => (v as num).toDouble()).toList(),
       );
 }
 

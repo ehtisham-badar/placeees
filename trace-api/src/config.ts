@@ -42,6 +42,10 @@ const Env = z.object({
   // Google service account for Play Integrity decoding (falls back to the FCM one).
   GOOGLE_SA_CLIENT_EMAIL: z.string().default(''),
   GOOGLE_SA_PRIVATE_KEY: z.string().default(''),
+  // Development media store (used when R2 isn't configured): a folder on the API's disk, and the
+  // URL phones use to reach this API (e.g. http://192.168.1.20:3000).
+  LOCAL_MEDIA_DIR: z.string().default(''),
+  PUBLIC_API_URL: z.string().default(''),
   // F-05 admin API and page. Unset = admin disabled.
   ADMIN_TOKEN: z.string().default(''),
   // F-16 venue links.

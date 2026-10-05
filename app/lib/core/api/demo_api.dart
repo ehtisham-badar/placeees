@@ -188,8 +188,11 @@ class DemoApi implements TraceApi {
     String? circleId,
     bool isRelay = false,
     CaptureAngle? angle,
+    Uint8List? voiceAac,
+    List<double>? waveform,
   }) async {
     await _latency(900);
+    if (type == DropType.voice && voiceAac == null) throw const ApiError('media_required');
     if (type == DropType.thenNow && angle == null) throw const ApiError('angle_required');
     if (isRelay && (unlockAt != null || circleId != null || recipientHandles.isNotEmpty)) {
       throw const ApiError('relay_must_be_public');
@@ -223,6 +226,8 @@ class DemoApi implements TraceApi {
       circleId: circleId,
       isRelay: isRelay,
       angle: angle,
+      localAudio: voiceAac,
+      waveform: waveform,
     );
     _drops[d.id] = d;
     // Simulated moderation pass.
@@ -752,6 +757,8 @@ class _DemoDrop {
     this.circleId,
     this.isRelay = false,
     this.angle,
+    this.localAudio,
+    this.waveform,
   });
 
   final String id;
@@ -773,6 +780,8 @@ class _DemoDrop {
   final String? circleId;
   bool isRelay;
   CaptureAngle? angle;
+  final Uint8List? localAudio;
+  final List<double>? waveform;
   int unlockCount;
   bool pending;
 
@@ -826,6 +835,8 @@ class _DemoDrop {
         circle: circle,
         relay: relay,
         angle: angle,
+        localAudio: localAudio,
+        waveform: waveform,
       );
 
   PassportEntry toPassport({DateTime? unlockedAt}) => PassportEntry(

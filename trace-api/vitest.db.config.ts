@@ -21,6 +21,8 @@ export default defineConfig({
       RUN_JOBS: 'false',
       LOG_LEVEL: 'silent',
       INTEGRITY_MODE: 'off',
+      LOCAL_MEDIA_DIR: '/tmp/trace-test-media',
+      PUBLIC_API_URL: 'http://localhost',
     },
   },
 });

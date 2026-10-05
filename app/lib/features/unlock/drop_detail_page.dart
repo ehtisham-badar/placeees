@@ -14,6 +14,7 @@ import '../../ui/trace_image.dart';
 import '../echoes/echoes_section.dart';
 import '../relays/relay_panel.dart';
 import '../thennow/then_now_section.dart';
+import '../voice/voice_player.dart';
 import '../trails/trail_banner.dart';
 
 /// The opened drop. Reopenable from anywhere once unlocked. Pops `true` if the map should refresh.
@@ -183,6 +184,10 @@ class _Body extends StatelessWidget {
         ],
         const SizedBox(height: Space.lg),
         if (c.type == DropType.photo || c.type == DropType.thenNow) _Photo(content: c),
+        if (c.type == DropType.voice) ...[
+          VoicePlayer(dropId: c.id, url: c.mediaUrl, bytes: c.localAudio, waveform: c.waveform),
+          if (c.body != null) const SizedBox(height: Space.lg),
+        ],
         if ((c.type == DropType.photo || c.type == DropType.thenNow) && c.body != null) const SizedBox(height: Space.lg),
         if (c.body != null) _Note(text: c.body!, framed: c.type == DropType.text),
         if (c.type == DropType.thenNow && !c.pending) ...[

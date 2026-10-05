@@ -20,6 +20,8 @@ const CreateDrop = z.object({
   recipientHandles: z.array(z.string().max(21)).max(20).optional(),
   circleId: z.uuid().optional(),
   isRelay: z.boolean().default(false),
+  /** Voice drops: 8–64 loudness levels in 0..1. */
+  waveform: z.array(z.number().min(0).max(1)).min(8).max(64).optional(),
   /** Then/Now (F-14): where the historical photo's camera pointed. */
   captureHeading: z.number().min(0).max(360).optional(),
   capturePitch: z.number().min(-90).max(90).optional(),

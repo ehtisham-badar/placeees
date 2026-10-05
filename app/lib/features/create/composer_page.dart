@@ -22,6 +22,7 @@ import '../../core/push/soft_ask.dart';
 import 'image_compress.dart';
 import 'rules_section.dart';
 import 'then_now_field.dart';
+import '../voice/voice_recorder_field.dart';
 
 const _maxCreateAccuracy = 65.0;
 
@@ -39,6 +40,7 @@ class _ComposerPageState extends State<ComposerPage> {
   final _teaser = TextEditingController();
   Uint8List? _photo;
   CaptureAngle? _angle;
+  VoiceTake? _voice;
   bool _relay = false;
   bool _anonymous = false;
   bool _posting = false;
@@ -74,7 +76,7 @@ class _ComposerPageState extends State<ComposerPage> {
         DropType.text => _body.text.trim().isNotEmpty,
         DropType.photo => _photo != null,
         DropType.thenNow => _photo != null && _angle != null,
-        DropType.voice => false,
+        DropType.voice => _voice != null,
       };
 
   Future<void> _pickPhoto() async {
@@ -111,6 +113,8 @@ class _ComposerPageState extends State<ComposerPage> {
         body: _body.text.trim().isEmpty ? null : _body.text.trim(),
         photoJpeg: _type == DropType.photo || _type == DropType.thenNow ? _photo : null,
         angle: _type == DropType.thenNow ? _angle : null,
+        voiceAac: _type == DropType.voice ? _voice?.bytes : null,
+        waveform: _type == DropType.voice ? _voice?.waveform : null,
         isRelay: _relay && _type != DropType.thenNow,
         teaser: _teaser.text.trim().isEmpty ? null : _teaser.text.trim(),
         isAnonymous: _anonymous,
@@ -199,7 +203,12 @@ class _ComposerPageState extends State<ComposerPage> {
                                   onPick: _pickPhoto,
                                   onAngle: (a) => setState(() => _angle = a),
                                 ),
-                              DropType.voice => const SizedBox.shrink(),
+                              DropType.voice => VoiceRecorderField(
+                                  key: const ValueKey('voice'),
+                                  take: _voice,
+                                  caption: _body,
+                                  onChanged: (t) => setState(() => _voice = t),
+                                ),
                             },
                           ),
                           const SizedBox(height: Space.lg),
@@ -381,7 +390,7 @@ class _TypePicker extends StatelessWidget {
           for (final t in _order)
             Expanded(
               child: Pressable(
-                onTap: t == DropType.voice ? null : () => onChanged(t),
+                onTap: () => onChanged(t),
                 child: AnimatedContainer(
                   duration: Motion.medium,
                   curve: Motion.curve,
@@ -397,15 +406,15 @@ class _TypePicker extends StatelessWidget {
                       Icon(
                         dropIcon(t),
                         size: 20,
-                        color: t == value ? TraceColors.ember : t == DropType.voice ? TraceColors.textFaint : TraceColors.textMuted,
+                        color: t == value ? TraceColors.ember : TraceColors.textMuted,
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        t == DropType.voice ? 'Soon' : dropNoun(t),
+                        dropNoun(t),
                         style: TextStyle(
                           fontWeight: FontWeight.w700,
                           fontSize: 12,
-                          color: t == value ? TraceColors.text : t == DropType.voice ? TraceColors.textFaint : TraceColors.textMuted,
+                          color: t == value ? TraceColors.text : TraceColors.textMuted,
                         ),
                       ),
                     ],

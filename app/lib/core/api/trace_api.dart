@@ -38,6 +38,8 @@ abstract class TraceApi {
     String? circleId,
     bool isRelay = false,
     CaptureAngle? angle,
+    Uint8List? voiceAac,
+    List<double>? waveform,
   });
 
   /// The true point of a drop once you're within 100 m of it (compass, F-07).

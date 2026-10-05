@@ -121,8 +121,14 @@ class LiveApi implements TraceApi {
     String? circleId,
     bool isRelay = false,
     CaptureAngle? angle,
+    Uint8List? voiceAac,
+    List<double>? waveform,
   }) async {
-    final mediaKey = photoJpeg == null ? null : await _upload(photoJpeg);
+    final mediaKey = photoJpeg != null
+        ? await _upload(photoJpeg)
+        : voiceAac != null
+            ? await _upload(voiceAac, contentType: 'audio/mp4')
+            : null;
     final j = await _send('POST', '/v1/drops', body: {
       'type': type.wire,
       'body': ?(body == null || body.isEmpty ? null : body),
@@ -139,6 +145,7 @@ class LiveApi implements TraceApi {
       'circleId': ?circleId,
       if (isRelay) 'isRelay': true,
       if (angle != null) ...{'captureHeading': angle.heading, 'capturePitch': angle.pitch},
+      if (waveform != null && waveform.length >= 8) 'waveform': waveform,
     }) as Map<String, dynamic>;
     return j['id'] as String;
   }
@@ -209,11 +216,11 @@ class LiveApi implements TraceApi {
   @override
   Future<void> leaveCircle(String circleId) => _send('POST', '/v1/circles/$circleId/leave');
 
-  /// Uploads a JPEG through a pre-signed URL and returns its media key.
-  Future<String> _upload(Uint8List jpeg) async {
-    final presign = await _send('POST', '/v1/media/presign', body: {'contentType': 'image/jpeg'}) as Map<String, dynamic>;
+  /// Uploads media through a pre-signed URL and returns its key.
+  Future<String> _upload(Uint8List bytes, {String contentType = 'image/jpeg'}) async {
+    final presign = await _send('POST', '/v1/media/presign', body: {'contentType': contentType}) as Map<String, dynamic>;
     final headers = (presign['headers'] as Map).cast<String, String>();
-    final upload = await http.put(Uri.parse(presign['url'] as String), headers: headers, body: jpeg);
+    final upload = await http.put(Uri.parse(presign['url'] as String), headers: headers, body: bytes);
     if (upload.statusCode >= 300) throw const ApiError('upload_failed');
     return presign['key'] as String;
   }

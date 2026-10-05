@@ -107,7 +107,7 @@ Create drop on-site → Others see a fuzzy marker → They travel there
 
 **Acceptance criteria**
 - [ ] Photo ≤ 10 MB compressed to HEIC/JPEG ≤ 1.5 MB before upload
-- [ ] Voice ≤ 30 s, AAC
+- [x] Voice ≤ 30 s, AAC
 - [ ] Text ≤ 500 chars
 - [ ] Drop is invisible to others until moderation status = `approved`
 
@@ -533,7 +533,7 @@ trace-api/
 ### Week 1–3 — Core loop
 - [x] Repo setup (Flutter app + API), local docker-compose with PostGIS — CI pending
 - [x] F-01 Sign in with Apple / Google + JWT + handle
-- [x] F-02 Create drop (text + photo; voice later)
+- [x] F-02 Create drop (text, photo, voice)
 - [x] F-03 Nearby map with deterministic fuzzing
 - [x] F-04 Unlock with server validation (attestation enforced in F-17)
 - [x] F-05 Moderation pipeline (auto) + report/block — admin panel pending
@@ -640,3 +640,6 @@ trace-api/
 | 2026-10-05 | iOS widget, Live Activities and App Clip ship as source + Xcode steps | Extension targets need the team's signing and App Group; can't be generated safely by hand |
 | 2026-10-05 | Nearby alerts: 20 geofences on fuzzy circles, ≤3 a day, opt-in, on-device only | Matches spec F-15 without sending location history anywhere |
 | 2026-10-05 | Per-user action limits are in-memory | One API instance for the pilot; move to Redis when scaling out |
+| 2026-10-06 | Voice drops store a 48-bar loudness waveform with the audio | Playback shows the recording's real shape |
+| 2026-10-06 | Voice audio isn't machine-moderated (teaser text is); reports cover the rest | No reliable audio moderation in the stack yet |
+| 2026-10-06 | Dev media store (`LOCAL_MEDIA_DIR`): files on the API's disk behind HMAC-signed, expiring URLs | Photo/voice work on a phone against a local API; production uses R2 |
